@@ -511,8 +511,7 @@ retry:
 		if (vs[i].deleted)
 			atomic_set_bit(vs[i].vid, sys->vdi_deleted);
 		add_vdi_state(vs[i].vid, vs[i].nr_copies, vs[i].snapshot,
-			      vs[i].copy_policy, vs[i].block_size_shift,
-			      vs[i].parent_vid);
+			      vs[i].copy_policy, vs[i].block_size_shift);
 	}
 out:
 	free(vs);
