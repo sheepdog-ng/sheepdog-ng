@@ -130,11 +130,14 @@ static int post_cluster_new_vdi(const struct sd_req *req, struct sd_rsp *rsp,
 	unsigned long nr = rsp->vdi.vdi_id;
 	int ret = rsp->result;
 
-	sd_info("req->vdi.base_vdi_id: %x, rsp->vdi.vdi_id: %x", req->vdi.base_vdi_id, rsp->vdi.vdi_id);
+	sd_info("req->vdi.base_vdi_id: %x, rsp->vdi.vdi_id: %x",
+		req->vdi.base_vdi_id, rsp->vdi.vdi_id);
 
 	sd_debug("done %d %lx", ret, nr);
-	if (ret == SD_RES_SUCCESS)
+	if (ret == SD_RES_SUCCESS) {
 		atomic_set_bit(nr, sys->vdi_inuse);
+		atomic_clear_bit(nr, sys->vdi_deleted);
+	}
 
 	return ret;
 }
