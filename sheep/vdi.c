@@ -433,7 +433,7 @@ static bool add_new_participant(struct vdi_state_entry *entry,
 }
 
 static void del_participant(struct vdi_state_entry *entry,
-			    const struct node_id *owner, bool err_msg)
+			    const struct node_id *owner)
 {
 	int idx = -1;
 
@@ -448,10 +448,7 @@ static void del_participant(struct vdi_state_entry *entry,
 	}
 
 	if (idx == -1) {
-		if (err_msg)
-			sd_err("unknown participants: %s",
-			       node_id_to_str(owner));
-
+		sd_err("unknown participants: %s", node_id_to_str(owner));
 		return;
 	}
 
@@ -566,7 +563,7 @@ bool vdi_unlock(uint32_t vid, const struct node_id *owner, int type)
 			sd_alert("leaving from unlocked VDI: %"PRIx32, vid);
 			break;
 		case LOCK_STATE_SHARED:
-			del_participant(entry, owner, true);
+			del_participant(entry, owner);
 			ret = true;
 			break;
 		case LOCK_STATE_LOCKED:
@@ -623,7 +620,7 @@ static void apply_vdi_lock_state_shared(uint32_t vid, bool lock,
 	if (lock)
 		add_new_participant(entry, locker);
 	else
-		del_participant(entry, locker, true);
+		del_participant(entry, locker);
 
 out:
 	sd_rw_unlock(&vdi_state_lock);
@@ -879,18 +876,6 @@ main_fn int inode_coherence_update(uint32_t vid, bool validate,
 out:
 	sd_rw_unlock(&vdi_state_lock);
 	return ret;
-}
-
-main_fn void remove_node_from_participants(const struct node_id *left)
-{
-	struct vdi_state_entry *entry;
-
-	sd_write_lock(&vdi_state_lock);
-	rb_for_each_entry(entry, &vdi_state_root, node) {
-		del_participant(entry, left, false);
-	}
-	sd_rw_unlock(&vdi_state_lock);
-
 }
 
 static struct sd_inode *alloc_inode(const struct vdi_iocb *iocb,
