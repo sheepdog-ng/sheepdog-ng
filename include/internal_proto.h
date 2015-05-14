@@ -165,12 +165,6 @@ enum sd_status {
 	SD_STATUS_KILLED,
 };
 
-enum sd_node_status {
-	SD_NODE_STATUS_INITIALIZATION = 1,
-	SD_NODE_STATUS_COLLECTING_CINFO,
-	SD_NODE_STATUS_OK,
-};
-
 struct node_id {
 	uint8_t addr[16];
 	uint16_t port;
@@ -373,22 +367,6 @@ struct vdi_state {
 	uint8_t copy_policy;
 	uint8_t block_size_shift;
 	uint8_t __pad[3];
-
-	uint32_t lock_state;
-
-	/* for normal locking */
-	struct node_id lock_owner;
-
-	/* for iSCSI multipath */
-	uint32_t nr_participants;
-	/*
-	 * XXX: participants should be able to have arbital length
-	 *
-	 * But if a number of tgtd can be equal to SD_MAX_COPIES, sheepdog can
-	 * tolerate enough hardware faults.
-	 */
-	uint32_t participants_state[SD_MAX_COPIES];
-	struct node_id participants[SD_MAX_COPIES];
 };
 
 #endif /* __INTERNAL_PROTO_H__ */

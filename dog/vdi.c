@@ -568,47 +568,6 @@ out:
 	return ret;
 }
 
-static struct vdi_state *get_vdi_state(int *count)
-{
-	int ret;
-	struct sd_req hdr;
-	struct sd_rsp *rsp = (struct sd_rsp *)&hdr;
-	struct vdi_state *vs = NULL;
-	unsigned int rlen;
-
-#define DEFAULT_VDI_STATE_COUNT 512
-	rlen = DEFAULT_VDI_STATE_COUNT * sizeof(struct vdi_state);
-	vs = xzalloc(rlen);
-retry:
-	sd_init_req(&hdr, SD_OP_GET_VDI_COPIES);
-	hdr.data_length = rlen;
-
-	ret = dog_exec_req(&sd_nid, &hdr, (char *)vs);
-	if (ret < 0)
-		goto fail;
-
-	switch (ret) {
-	case SD_RES_SUCCESS:
-		break;
-	case SD_RES_BUFFER_SMALL:
-		rlen *= 2;
-		vs = xrealloc(vs, rlen);
-		goto retry;
-	default:
-		sd_err("failed to execute SD_OP_GET_VDI_COPIES: %s",
-		       sd_strerror(ret));
-		goto fail;
-	}
-
-	*count = rsp->data_length / sizeof(*vs);
-	return vs;
-
-fail:
-	free(vs);
-	vs = NULL;
-	return NULL;
-}
-
 static int has_own_objects(uint32_t vid, bool *result)
 {
 	struct sd_inode *inode;
@@ -642,11 +601,6 @@ static int vdi_snapshot(int argc, char **argv)
 	int ret;
 	char buf[SD_INODE_HEADER_SIZE];
 	struct sd_inode *inode = (struct sd_inode *)buf;
-	struct sd_req hdr;
-	struct vdi_state *vs = NULL;
-	int vs_count = 0;
-	struct node_id owners[SD_MAX_COPIES];
-	int nr_owners = 0, nr_issued_prevent_inode_update = 0;
 	bool fail_if_snapshot = false;
 
 	if (vdi_cmd_data.snapshot_id != 0) {
@@ -694,45 +648,6 @@ static int vdi_snapshot(int argc, char **argv)
 		return EXIT_FAILURE;
 	}
 
-	vs = get_vdi_state(&vs_count);
-	if (!vs)
-		return EXIT_FAILURE;
-
-	for (int i = 0; i < vs_count; i++) {
-		struct vdi_state *s = &vs[i];
-
-		if (s->vid != vid)
-			continue;
-
-		if (s->lock_state == LOCK_STATE_LOCKED) {
-			/* QEMU is using it */
-			memset(&owners[0], 0, sizeof(owners[0]));
-			memcpy(&owners[0], &s->lock_owner, sizeof(owners[0]));
-			nr_owners = 1;
-		} else {
-			/* tgt is using it */
-			for (int j = 0; j < s->nr_participants; j++) {
-				memset(&owners[nr_owners], 0,
-				       sizeof(owners[nr_owners]));
-				memcpy(&owners[nr_owners],
-				       &s->participants[nr_owners],
-				       sizeof(owners[nr_owners]));
-				nr_owners++;
-			}
-		}
-	}
-
-	for (int i = 0; i < nr_owners; i++) {
-		sd_init_req(&hdr, SD_OP_PREVENT_INODE_UPDATE);
-		ret = dog_exec_req(&owners[i], &hdr, NULL);
-		if (ret < 0) {
-			sd_err("preventing inode update failed");
-			goto out;
-		}
-
-		nr_issued_prevent_inode_update++;
-	}
-
 	if (vdi_cmd_data.reduce_identical_snapshots) {
 		bool result;
 		ret = has_own_objects(vid, &result);
@@ -772,14 +687,6 @@ static int vdi_snapshot(int argc, char **argv)
 	}
 
 out:
-	for (int i = 0; i < nr_issued_prevent_inode_update; i++) {
-		sd_init_req(&hdr, SD_OP_ALLOW_INODE_UPDATE);
-		ret = dog_exec_req(&owners[i], &hdr, NULL);
-		if (ret < 0)
-			sd_err("allowing inode update failed");
-	}
-
-	free(vs);
 	return ret;
 }
 
@@ -2994,129 +2901,6 @@ static int vdi_alter_copy(int argc, char **argv)
 	return EXIT_FAILURE;
 }
 
-static int lock_list(int argc, char **argv)
-{
-	struct vdi_state *vs = NULL;
-	int ret = 0, count = 0;
-
-	vs = get_vdi_state(&count);
-
-	init_tree();
-	if (parse_vdi(construct_vdi_tree, SD_INODE_HEADER_SIZE,
-			NULL, true) < 0)
-		goto out;
-
-	printf("VDI | owner node\n");
-	for (int i = 0; i < count; i++) {
-		struct vdi_tree *vdi;
-
-		if (vs[i].lock_state == LOCK_STATE_UNLOCKED)
-			continue;
-
-		vdi = find_vdi_from_root_by_vid(vs[i].vid);
-		if (vs[i].lock_state == LOCK_STATE_LOCKED) {
-			printf("%s | %s\n", vdi->name,
-			       node_id_to_str(&vs[i].lock_owner));
-		} else {	/* LOCK_STATE_SHARED */
-			printf("%s |", vdi->name);
-
-			for (int j = 0; j < vs[i].nr_participants; j++) {
-				printf(" %s",
-				       node_id_to_str(&vs[i].participants[j]));
-				switch(vs[i].participants_state[j]) {
-				case SHARED_LOCK_STATE_MODIFIED:
-					printf("(modified)");
-					break;
-				case SHARED_LOCK_STATE_SHARED:
-					printf("(shared)");
-					break;
-				case SHARED_LOCK_STATE_INVALIDATED:
-					printf("(invalidated)");
-					break;
-				default:
-					printf("(UNKNOWN %d, BUG!)",
-					       vs[i].participants_state[j]);
-					break;
-				}
-			}
-
-			printf("\n");
-		}
-	}
-
-out:
-	free(vs);
-	return ret;
-}
-
-static int lock_unlock(int argc, char **argv)
-{
-	struct sd_req hdr;
-	const char *vdiname = argv[optind];
-	struct vdi_tree *vdi;
-	struct vdi_state *vs = NULL;
-	int ret = EXIT_SYSFAIL, vs_count = 0;
-	uint32_t type;
-
-	init_tree();
-	if (parse_vdi(construct_vdi_tree, SD_INODE_HEADER_SIZE,
-			NULL, true) < 0)
-		goto out;
-
-	vdi = find_vdi_from_root_by_name(vdiname);
-	if (!vdi) {
-		sd_err("VDI: %s not found", vdiname);
-		goto out;
-	}
-
-	vs = get_vdi_state(&vs_count);
-	if (!vs)
-		goto out;
-
-	for (int i = 0; i < vs_count; i++) {
-		if (vs[i].vid != vdi->vid)
-			continue;
-
-		switch (vs[i].lock_state) {
-		case LOCK_STATE_UNLOCKED:
-			sd_err("VDI: %s is not locked", vdiname);
-			goto out;
-		case LOCK_STATE_LOCKED:
-			type = LOCK_TYPE_NORMAL;
-			break;
-		case LOCK_STATE_SHARED:
-			type = LOCK_TYPE_SHARED;
-			break;
-		default:
-			sd_err("VDI: %s unknown lock state", vdiname);
-			goto out;
-		}
-
-		sd_init_req(&hdr, SD_OP_RELEASE_VDI);
-		hdr.vdi.base_vdi_id = vdi->vid;
-		hdr.vdi.type = type;
-		ret = dog_exec_req(&sd_nid, &hdr, NULL);
-		goto out;
-	}
-
-out:
-	if (vs)
-		free(vs);
-	return ret;
-}
-
-static struct subcommand vdi_lock_cmd[] = {
-	{"list", NULL, NULL, "list locked VDIs", NULL, 0, lock_list},
-	{"unlock", "<vdiname>", NULL, "unlock locked VDI forcibly", NULL,
-	 CMD_NEED_ARG, lock_unlock},
-	{NULL},
-};
-
-static int vdi_lock(int argc, char **argv)
-{
-	return do_generic_subcommand(vdi_lock_cmd, argc, argv);
-}
-
 static struct subcommand vdi_cmd[] = {
 	{"check", "<vdiname>", "seaphT", "check and repair image's consistency",
 	 NULL, CMD_NEED_NODELIST|CMD_NEED_ARG,
@@ -3181,8 +2965,6 @@ static struct subcommand vdi_cmd[] = {
 	 vdi_cache, vdi_options},
 	{"alter-copy", "<vdiname>", "caphT", "set the vdi's redundancy level",
 	 NULL, CMD_NEED_ARG|CMD_NEED_NODELIST, vdi_alter_copy, vdi_options},
-	{"lock", NULL, "aphT", "See 'dog vdi lock' for more information",
-	 vdi_lock_cmd, CMD_NEED_ARG, vdi_lock, vdi_options},
 	{NULL,},
 };
 

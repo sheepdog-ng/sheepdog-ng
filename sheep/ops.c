@@ -1385,101 +1385,6 @@ static int local_repair_replica(struct request *req)
 	return ret;
 }
 
-static int cluster_lock_vdi_work(struct request *req)
-{
-	if (sys->node_status == SD_NODE_STATUS_COLLECTING_CINFO) {
-		/*
-		 * this node is collecting vdi locking status, not ready for
-		 * allowing lock by itself
-		 */
-		sd_err("This node is not ready for vdi locking, try later");
-		return SD_RES_COLLECTING_CINFO;
-	}
-
-	return cluster_get_vdi_info(req);
-}
-
-static int cluster_lock_vdi_main(const struct sd_req *req, struct sd_rsp *rsp,
-				 void *data, const struct sd_node *sender)
-{
-	uint32_t vid = rsp->vdi.vdi_id;
-
-	if (sys->node_status == SD_NODE_STATUS_COLLECTING_CINFO) {
-		sd_debug("logging vdi unlock information for later replay");
-		log_vdi_op_lock(vid, &sender->nid, req->vdi.type);
-		return SD_RES_SUCCESS;
-	}
-
-	if (!(sys->cinfo.flags & SD_CLUSTER_FLAG_USE_LOCK)) {
-		sd_debug("vdi lock is disabled");
-		return SD_RES_SUCCESS;
-	}
-
-	sd_info("node: %s is locking VDI (type: %s): %"PRIx32,
-		node_to_str(sender),
-		req->vdi.type == LOCK_TYPE_NORMAL ? "normal" : "shared", vid);
-
-	if (!vdi_lock(vid, &sender->nid, req->vdi.type)) {
-		sd_err("locking %"PRIx32 "failed", vid);
-		return SD_RES_VDI_LOCKED;
-	}
-
-	return SD_RES_SUCCESS;
-}
-
-static int cluster_release_vdi_main(const struct sd_req *req,
-				    struct sd_rsp *rsp, void *data,
-				    const struct sd_node *sender)
-{
-	uint32_t vid = req->vdi.base_vdi_id;
-
-	if (sys->node_status == SD_NODE_STATUS_COLLECTING_CINFO) {
-		sd_debug("logging vdi lock information for later replay");
-		log_vdi_op_unlock(vid, &sender->nid, req->vdi.type);
-		return SD_RES_SUCCESS;
-	}
-
-	if (!(sys->cinfo.flags & SD_CLUSTER_FLAG_USE_LOCK)) {
-		sd_debug("vdi lock is disabled");
-		return SD_RES_SUCCESS;
-	}
-
-	sd_info("node: %s is unlocking VDI (type: %s): %"PRIx32, node_to_str(sender),
-		req->vdi.type == LOCK_TYPE_NORMAL ? "normal" : "shared", vid);
-
-	vdi_unlock(vid, &sender->nid, req->vdi.type);
-
-	return SD_RES_SUCCESS;
-}
-
-static int local_vdi_state_snapshot_ctl(const struct sd_req *req,
-					struct sd_rsp *rsp, void *data,
-					const struct sd_node *sender)
-{
-	bool get = !!req->vdi_state_snapshot.get;
-	int epoch = req->vdi_state_snapshot.tgt_epoch;
-	int ret, length = 0;
-
-	sd_info("%s vdi state snapshot at epoch %d",
-		get ? "getting" : "freeing", epoch);
-
-	if (get) {
-		ret = get_vdi_state_snapshot(epoch, data, req->data_length,
-					     &length);
-		if (ret == SD_RES_SUCCESS)
-			rsp->data_length = length;
-		else {
-			sd_info("failed to get vdi state snapshot: %s",
-			       sd_strerror(ret));
-
-			return ret;
-		}
-	} else
-		free_vdi_state_snapshot(epoch);
-
-	return SD_RES_SUCCESS;
-}
-
 static int local_get_cluster_default(const struct sd_req *req,
 				     struct sd_rsp *rsp,
 				     void *data, const struct sd_node *sender)
@@ -1489,18 +1394,6 @@ static int local_get_cluster_default(const struct sd_req *req,
 	rsp->cluster_default.block_size_shift = sys->cinfo.block_size_shift;
 
 	return SD_RES_SUCCESS;
-}
-
-static int cluster_inode_coherence(const struct sd_req *req,
-				   struct sd_rsp *rsp, void *data,
-				   const struct sd_node *sender)
-{
-	sd_debug("inode coherence: %s %"PRIx32" from %s",
-		 req->inode_coherence.validate ? "validate" : "invalidate",
-		 req->inode_coherence.vid, node_to_str(sender));
-
-	return inode_coherence_update(req->inode_coherence.vid,
-			       !!req->inode_coherence.validate, &sender->nid);
 }
 
 static int local_get_recovery(struct request *req)
@@ -1659,15 +1552,13 @@ static struct sd_op_template sd_ops[] = {
 	[SD_OP_LOCK_VDI] = {
 		.name = "LOCK_VDI",
 		.type = SD_OP_TYPE_CLUSTER,
-		.process_work = cluster_lock_vdi_work,
-		.process_main = cluster_lock_vdi_main,
+		.process_work = cluster_get_vdi_info,
 	},
 
 	[SD_OP_RELEASE_VDI] = {
 		.name = "RELEASE_VDI",
 		.type = SD_OP_TYPE_CLUSTER,
 		.process_work = local_release_vdi,
-		.process_main = cluster_release_vdi_main,
 	},
 
 	[SD_OP_REWEIGHT] = {
@@ -1703,12 +1594,6 @@ static struct sd_op_template sd_ops[] = {
 		.type = SD_OP_TYPE_CLUSTER,
 		.is_admin_op = true,
 		.process_main = cluster_alter_vdi_copy,
-	},
-
-	[SD_OP_INODE_COHERENCE] = {
-		.name = "INODE_COHERENCE",
-		.type = SD_OP_TYPE_CLUSTER,
-		.process_main = cluster_inode_coherence,
 	},
 
 	/* local operations */
@@ -1944,12 +1829,6 @@ static struct sd_op_template sd_ops[] = {
 		.name = "REPAIR_REPLICA",
 		.type = SD_OP_TYPE_LOCAL,
 		.process_work = local_repair_replica,
-	},
-
-	[SD_OP_VDI_STATE_SNAPSHOT_CTL] = {
-		.name = "VDI_STATE_SNAPSHOT_CTL",
-		.type = SD_OP_TYPE_LOCAL,
-		.process_main = local_vdi_state_snapshot_ctl,
 	},
 
 	[SD_OP_GET_CLUSTER_DEFAULT] = {

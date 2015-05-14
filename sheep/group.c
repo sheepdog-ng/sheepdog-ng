@@ -572,8 +572,6 @@ static void do_get_vdis(struct work *work)
 	}
 }
 
-static void collect_cinfo(void);
-
 static void get_vdis_done(struct work *work)
 {
 	struct get_vdis_work *w =
@@ -586,14 +584,6 @@ static void get_vdis_done(struct work *work)
 
 	rb_destroy(&w->nroot, struct sd_node, rb);
 	free(w);
-
-	if (refcount_read(&nr_get_vdis_works) == 0)
-		/*
-		 * Now this sheep process could construct its vdi state.
-		 * It can collect other state e.g. vdi locking.
-		 */
-		collect_cinfo();
-
 }
 
 int inc_and_log_epoch(void)
@@ -683,148 +673,6 @@ static void get_vdis(const struct rb_root *nroot, const struct sd_node *joined)
 	queue_work(sys->block_wqueue, &w->work);
 }
 
-struct cinfo_collection_work {
-	struct work work;
-
-	int epoch;
-	struct vnode_info *members;
-
-	int nr_vdi_states;
-	struct vdi_state *result;
-};
-
-static struct cinfo_collection_work *collect_work;
-
-static struct vdi_state *do_cinfo_collection_work(uint32_t epoch,
-						  struct sd_node *n,
-						  int *nr_vdi_states)
-{
-	struct vdi_state *vs = NULL;
-	unsigned int rlen = 4096;
-	struct sd_req hdr;
-	struct sd_rsp *rsp = (struct sd_rsp *)&hdr;
-	int ret;
-
-	vs = xcalloc(rlen, sizeof(*vs));
-
-retry:
-	sd_init_req(&hdr, SD_OP_VDI_STATE_SNAPSHOT_CTL);
-	hdr.vdi_state_snapshot.get = 1;
-	hdr.vdi_state_snapshot.tgt_epoch = epoch;
-	hdr.data_length = rlen;
-
-	ret = sheep_exec_req(&n->nid, &hdr, (char *)vs);
-	if (ret == SD_RES_SUCCESS) {
-		sd_debug("succeed to obtain snapshot of vdi states");
-		*nr_vdi_states = rsp->data_length / sizeof(*vs);
-		return vs;
-	} else if (ret == SD_RES_BUFFER_SMALL) {
-		sd_debug("buffer is small for obtaining snapshot of vdi states,"
-			 " doubling it (%lu -> %lu)", rlen * sizeof(*vs),
-			 rlen * 2 * sizeof(*vs));
-		rlen *= 2;
-		vs = xrealloc(vs, sizeof(*vs) * rlen);
-		goto retry;
-	}
-
-	sd_err("failed to obtain snapshot of vdi states from node %s",
-	       node_to_str(n));
-	return NULL;
-}
-
-static void cinfo_collection_work(struct work *work)
-{
-	struct sd_req hdr;
-	struct vdi_state *vs = NULL;
-	struct cinfo_collection_work *w =
-		container_of(work, struct cinfo_collection_work, work);
-	struct sd_node *n;
-	int ret, nr_vdi_states = 0;
-
-	sd_debug("start collection of cinfo...");
-
-	sd_assert(w == collect_work);
-
-	rb_for_each_entry(n, &w->members->nroot, rb) {
-		if (node_is_local(n))
-			continue;
-
-		vs = do_cinfo_collection_work(w->epoch, n, &nr_vdi_states);
-		if (vs)
-			goto get_succeed;
-	}
-
-	panic("getting a snapshot of vdi state at epoch %d failed", w->epoch);
-
-get_succeed:
-	w->nr_vdi_states = nr_vdi_states;
-	w->result = vs;
-
-	sd_debug("collecting cinfo done, freeing from remote nodes");
-
-	rb_for_each_entry(n, &w->members->nroot, rb) {
-		if (node_is_local(n))
-			continue;
-
-		sd_init_req(&hdr, SD_OP_VDI_STATE_SNAPSHOT_CTL);
-		hdr.vdi_state_snapshot.get = 0;
-		hdr.vdi_state_snapshot.tgt_epoch = w->epoch;
-
-		ret = sheep_exec_req(&n->nid, &hdr, (char *)vs);
-		if (ret != SD_RES_SUCCESS)
-			sd_err("error at freeing a snapshot of vdi state"
-			       " at epoch %d", w->epoch);
-	}
-
-	sd_debug("collection done");
-}
-
-static void cinfo_collection_done(struct work *work)
-{
-	struct cinfo_collection_work *w =
-		container_of(work, struct cinfo_collection_work, work);
-
-	sd_assert(w == collect_work);
-
-	for (int i = 0; i < w->nr_vdi_states; i++) {
-		struct vdi_state *vs = &w->result[i];
-
-		sd_debug("VID: %"PRIx32, vs->vid);
-		sd_debug("nr_copies: %d", vs->nr_copies);
-		sd_debug("snapshot: %d", vs->snapshot);
-		sd_debug("copy_policy: %d", vs->copy_policy);
-		sd_debug("block_size_shift: %"PRIu8, vs->block_size_shift);
-		sd_debug("lock_state: %x", vs->lock_state);
-		sd_debug("owner: %s",
-			 addr_to_str(vs->lock_owner.addr, vs->lock_owner.port));
-
-		apply_vdi_lock_state(vs);
-	}
-
-	put_vnode_info(w->members);
-	free(w->result);
-	free(w);
-	collect_work = NULL;
-
-	play_logged_vdi_ops();
-
-	sd_debug("cluster info collection finished");
-	sys->node_status = SD_NODE_STATUS_OK;
-}
-
-static void collect_cinfo(void)
-{
-	if (!collect_work)
-		return;
-
-	sd_debug("start cluster info collection for epoch %d",
-		 collect_work->epoch);
-
-	collect_work->work.fn = cinfo_collection_work;
-	collect_work->work.done = cinfo_collection_done;
-	queue_work(sys->block_wqueue, &collect_work->work);
-}
-
 void wait_get_vdis_done(void)
 {
 	sd_debug("waiting for vdi list");
@@ -875,6 +723,10 @@ static void update_cluster_info(const struct cluster_info *cinfo,
 	if (!sys->gateway_only)
 		setup_backend_store(cinfo);
 
+	if (node_is_local(joined))
+		sockfd_cache_add_group(nroot);
+	sockfd_cache_add(&joined->nid);
+
 	/*
 	 * We need use main_thread_get() to obtain current_vnode_info. The
 	 * reference count of old_vnode_info is decremented at the last of this
@@ -883,31 +735,6 @@ static void update_cluster_info(const struct cluster_info *cinfo,
 	 */
 	old_vnode_info = main_thread_get(current_vnode_info);
 	main_thread_set(current_vnode_info, alloc_vnode_info(nroot));
-
-	if (node_is_local(joined)) {
-		sockfd_cache_add_group(nroot);
-
-		if (0 < cinfo->epoch && cinfo->status == SD_STATUS_OK) {
-			struct vnode_info *members = grab_vnode_info(
-				main_thread_get(current_vnode_info));
-
-			if (members->nr_nodes == 1) {
-				sd_debug("Currently, there are no other"
-					 " members. I don't have to collect"
-					 "CINFO from others");
-				put_vnode_info(members);
-			} else {
-				collect_work = xzalloc(sizeof(*collect_work));
-				collect_work->epoch = cinfo->epoch - 1;
-				collect_work->members = members;
-			}
-		}
-	} else {
-		if (0 < cinfo->epoch && cinfo->status == SD_STATUS_OK)
-			take_vdi_state_snapshot(cinfo->epoch - 1);
-	}
-
-	sockfd_cache_add(&joined->nid);
 
 	get_vdis(nroot, joined);
 
@@ -1188,18 +1015,9 @@ main_fn void sd_accept_handler(const struct sd_node *joined,
 
 	update_cluster_info(cinfo, joined, nroot, nr_nodes);
 
-	if (node_is_local(joined)) {
- 		/* this output is used for testing */
- 		sd_debug("join Sheepdog cluster");
-
-		if (collect_work) {
-			sd_debug("status is SD_NODE_STATUS_COLLECTING_CINFO");
-			sys->node_status = SD_NODE_STATUS_COLLECTING_CINFO;
-		} else {
-			sd_debug("status is SD_NODE_STATUS_OK");
-			sys->node_status = SD_NODE_STATUS_OK;
-		}
-	}
+	if (node_is_local(joined))
+		/* this output is used for testing */
+		sd_debug("join Sheepdog cluster");
 }
 
 static bool is_gateway_only_cluster(const struct rb_root *nroot)

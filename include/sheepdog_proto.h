@@ -194,16 +194,6 @@ struct sd_req {
 			uint8_t		addr[16];
 			uint16_t	port;
 		} forw;
-		struct {
-			uint32_t        get; /* 0 means free, 1 means get */
-			uint32_t        tgt_epoch;
-		} vdi_state_snapshot;
-		struct {
-			/* 1 means validate, 0 means invalidate */
-			uint32_t        vid;
-			uint32_t        validate;
-		} inode_coherence;
-
 
 		uint32_t		__pad[8];
 	};

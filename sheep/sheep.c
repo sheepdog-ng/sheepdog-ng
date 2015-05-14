@@ -675,7 +675,6 @@ int main(int argc, char **argv)
 	enum log_dst_type log_dst_type;
 
 	sys->cinfo.flags |= SD_CLUSTER_FLAG_AUTO_VNODES;
-	sys->node_status = SD_NODE_STATUS_INITIALIZATION;
 
 	sys->rthrottling.max_exec_count = 0;
 	sys->rthrottling.queue_work_interval = 0;
