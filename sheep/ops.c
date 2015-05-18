@@ -334,6 +334,7 @@ static int cluster_make_fs(const struct sd_req *req, struct sd_rsp *rsp,
 
 	memset(sys->vdi_inuse, 0, sizeof(sys->vdi_inuse));
 	clean_vdi_state();
+	objlist_cache_format();
 
 	sys->cinfo.epoch = 0;
 
