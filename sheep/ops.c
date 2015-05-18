@@ -134,10 +134,8 @@ static int post_cluster_new_vdi(const struct sd_req *req, struct sd_rsp *rsp,
 		req->vdi.base_vdi_id, rsp->vdi.vdi_id);
 
 	sd_debug("done %d %lx", ret, nr);
-	if (ret == SD_RES_SUCCESS) {
+	if (ret == SD_RES_SUCCESS)
 		atomic_set_bit(nr, sys->vdi_inuse);
-		atomic_clear_bit(nr, sys->vdi_deleted);
-	}
 
 	return ret;
 }
@@ -197,11 +195,6 @@ static int post_cluster_del_vdi(const struct sd_req *req, struct sd_rsp *rsp,
 	unsigned long vid = rsp->vdi.vdi_id;
 	struct cache_deletion_work *dw;
 	int ret = rsp->result;
-
-	if (ret == SD_RES_SUCCESS) {
-		atomic_set_bit(vid, sys->vdi_deleted);
-		vdi_mark_deleted(vid);
-	}
 
 	if (!sys->enable_object_cache)
 		return ret;
@@ -340,7 +333,6 @@ static int cluster_make_fs(const struct sd_req *req, struct sd_rsp *rsp,
 		remove_epoch(i);
 
 	memset(sys->vdi_inuse, 0, sizeof(sys->vdi_inuse));
-	memset(sys->vdi_deleted, 0, sizeof(sys->vdi_deleted));
 	clean_vdi_state();
 
 	sys->cinfo.epoch = 0;
@@ -465,12 +457,6 @@ static int local_read_vdis(const struct sd_req *req, struct sd_rsp *rsp,
 			   void *data, const struct sd_node *sender)
 {
 	return read_vdis(data, req->data_length, &rsp->data_length);
-}
-
-static int local_read_del_vdis(const struct sd_req *req, struct sd_rsp *rsp,
-			   void *data, const struct sd_node *sender)
-{
-	return read_del_vdis(data, req->data_length, &rsp->data_length);
 }
 
 static int local_get_vdi_copies(const struct sd_req *req, struct sd_rsp *rsp,
@@ -1610,13 +1596,6 @@ static struct sd_op_template sd_ops[] = {
 		.type = SD_OP_TYPE_LOCAL,
 		.force = true,
 		.process_main = local_read_vdis,
-	},
-
-	[SD_OP_READ_DEL_VDIS] = {
-		.name = "READ_DEL_VDIS",
-		.type = SD_OP_TYPE_LOCAL,
-		.force = true,
-		.process_main = local_read_del_vdis,
 	},
 
 	[SD_OP_GET_VDI_COPIES] = {

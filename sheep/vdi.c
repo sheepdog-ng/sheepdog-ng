@@ -16,7 +16,6 @@ struct vdi_state_entry {
 	unsigned int nr_copies;
 	uint8_t block_size_shift;
 	bool snapshot;
-	bool deleted;
 	uint8_t copy_policy;
 	struct rb_node node;
 };
@@ -832,17 +831,6 @@ int read_vdis(char *data, int len, unsigned int *rsp_len)
 	return SD_RES_SUCCESS;
 }
 
-int read_del_vdis(char *data, int len, unsigned int *rsp_len)
-{
-	if (len != sizeof(sys->vdi_deleted))
-		return SD_RES_INVALID_PARMS;
-
-	memcpy(data, sys->vdi_deleted, sizeof(sys->vdi_deleted));
-	*rsp_len = sizeof(sys->vdi_deleted);
-
-	return SD_RES_SUCCESS;
-}
-
 struct deletion_work {
 	struct work work;
 	uint32_t target_vid;
@@ -974,7 +962,6 @@ static void delete_vdi_done(struct work *work)
 static int start_deletion(struct request *req, uint32_t vid)
 {
 	struct deletion_work *dw = NULL;
-	struct sd_rsp *rsp = &req->rp;
 	int ret = SD_RES_SUCCESS, finish_fd;
 
 	dw = xzalloc(sizeof(*dw));
@@ -998,8 +985,6 @@ static int start_deletion(struct request *req, uint32_t vid)
 	eventfd_xread(finish_fd);
 	close(finish_fd);
 
-	rsp->vdi.vdi_id = vid;
-
 	return ret;
 out:
 	free(dw);
@@ -1019,22 +1004,6 @@ int vdi_delete(const struct vdi_iocb *iocb, struct request *req)
 	ret = start_deletion(req, info.vid);
 out:
 	return ret;
-}
-
-void vdi_mark_deleted(uint32_t vid)
-{
-	struct vdi_state_entry *entry;
-
-	sd_write_lock(&vdi_state_lock);
-	entry = vdi_state_search(&vdi_state_root, vid);
-	if (!entry) {
-		sd_err("VID: %"PRIx32" not found", vid);
-		goto out;
-	}
-
-	entry->deleted = true;
-out:
-	sd_rw_unlock(&vdi_state_lock);
 }
 
 /* Calculate a vdi attribute id from sheepdog_vdi_attr. */

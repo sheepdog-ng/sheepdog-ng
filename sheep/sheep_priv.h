@@ -136,7 +136,6 @@ struct system_info {
 	uint64_t disk_space;
 
 	DECLARE_BITMAP(vdi_inuse, SD_NR_VDIS);
-	DECLARE_BITMAP(vdi_deleted, SD_NR_VDIS);
 
 	int local_req_efd;
 
@@ -358,7 +357,6 @@ int vdi_exist(uint32_t vid);
 int vdi_create(const struct vdi_iocb *iocb, uint32_t *new_vid);
 int vdi_snapshot(const struct vdi_iocb *iocb, uint32_t *new_vid);
 int vdi_delete(const struct vdi_iocb *iocb, struct request *req);
-void vdi_mark_deleted(uint32_t vid);
 int vdi_lookup(const struct vdi_iocb *iocb, struct vdi_info *info);
 void clean_vdi_state(void);
 int sd_delete_vdi(const char *name);
@@ -371,7 +369,6 @@ bool vdi_unlock(uint32_t vid, const struct node_id *owner);
 extern int ec_max_data_strip;
 
 int read_vdis(char *data, int len, unsigned int *rsp_len);
-int read_del_vdis(char *data, int len, unsigned int *rsp_len);
 
 int get_vdi_attr(struct sheepdog_vdi_attr *vattr, int data_len, uint32_t vid,
 		uint32_t *attrid, uint64_t ctime, bool write,

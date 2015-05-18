@@ -24,7 +24,7 @@
 #include "rbtree.h"
 #include "fec.h"
 
-#define SD_SHEEP_PROTO_VER 0x0a
+#define SD_SHEEP_PROTO_VER 0x09
 
 #define SD_DEFAULT_COPIES 3
 /*
@@ -363,7 +363,6 @@ struct vdi_state {
 	uint32_t vid;
 	uint8_t nr_copies;
 	uint8_t snapshot;
-	uint8_t deleted;
 	uint8_t copy_policy;
 	uint8_t block_size_shift;
 	uint8_t __pad[3];
