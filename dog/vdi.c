@@ -40,8 +40,6 @@ static struct sd_option vdi_options[] = {
 	 "                          neither comparing nor repairing"},
 	{'z', "block_size_shift", true, "specify the bit shift num for"
 			       " data object size"},
-	{'R', "reduce-identical-snapshots", false, "do not create snapshot if "
-	 "working VDI doesn't have its own objects"},
 	{ 0, NULL, false, NULL },
 };
 
@@ -63,7 +61,6 @@ static struct vdi_cmd_data {
 	uint64_t oid;
 	bool no_share;
 	bool exist;
-	bool reduce_identical_snapshots;
 } vdi_cmd_data = { ~0, };
 
 struct get_vdi_info {
@@ -568,32 +565,6 @@ out:
 	return ret;
 }
 
-static int has_own_objects(uint32_t vid, bool *result)
-{
-	struct sd_inode *inode;
-	int ret = SD_RES_SUCCESS;
-
-	*result = true;
-	inode = xzalloc(sizeof(*inode));
-
-	ret = dog_read_object(vid_to_vdi_oid(vid), inode,
-			      sizeof(*inode), 0, true);
-	if (ret != SD_RES_SUCCESS)
-		goto out;
-
-	for (int i = 0; i < SD_INODE_DATA_INDEX; i++) {
-		if (inode->data_vdi_id[i] && inode->data_vdi_id[i] == vid)
-			/* VDI has its own object */
-			goto out;
-	}
-
-	*result = false;
-
-out:
-	free(inode);
-	return ret;
-}
-
 static int vdi_snapshot(int argc, char **argv)
 {
 	const char *vdiname = argv[optind++];
@@ -634,23 +605,6 @@ static int vdi_snapshot(int argc, char **argv)
 	if (inode->store_policy) {
 		sd_err("creating a snapshot of hypervolume is not supported");
 		return EXIT_FAILURE;
-	}
-
-	if (vdi_cmd_data.reduce_identical_snapshots) {
-		bool result;
-		ret = has_own_objects(vid, &result);
-
-		if (ret != SD_RES_SUCCESS)
-			goto out;
-
-		if (!result) {
-			if (verbose)
-				sd_info("VDI %s doesn't have its own objects, "
-					"skipping creation of snapshot",
-					vdiname);
-
-			goto out;
-		}
 	}
 
 	ret = dog_write_object(vid_to_vdi_oid(vid), 0,
@@ -2896,7 +2850,7 @@ static struct subcommand vdi_cmd[] = {
 	{"create", "<vdiname> <size>", "PycaphrvzT", "create an image",
 	 NULL, CMD_NEED_NODELIST|CMD_NEED_ARG,
 	 vdi_create, vdi_options},
-	{"snapshot", "<vdiname>", "saphrvTR", "create a snapshot",
+	{"snapshot", "<vdiname>", "saphrvT", "create a snapshot",
 	 NULL, CMD_NEED_ARG,
 	 vdi_snapshot, vdi_options},
 	{"clone", "<src vdi> <dst vdi>", "sPnaphrvT", "clone an image",
@@ -3059,8 +3013,6 @@ static int vdi_parser(int ch, const char *opt)
 		}
 		vdi_cmd_data.block_size_shift = block_size_shift;
 		break;
-	case 'R':
-		vdi_cmd_data.reduce_identical_snapshots = true;
 	}
 
 	return 0;
