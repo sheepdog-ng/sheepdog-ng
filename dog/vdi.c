@@ -601,7 +601,6 @@ static int vdi_snapshot(int argc, char **argv)
 	int ret;
 	char buf[SD_INODE_HEADER_SIZE];
 	struct sd_inode *inode = (struct sd_inode *)buf;
-	bool fail_if_snapshot = false;
 
 	if (vdi_cmd_data.snapshot_id != 0) {
 		sd_err("Please specify a non-integer value for "
@@ -609,39 +608,28 @@ static int vdi_snapshot(int argc, char **argv)
 		return EXIT_USAGE;
 	}
 
-	ret = find_vdi_name(vdiname, vdi_cmd_data.snapshot_id,
-			vdi_cmd_data.snapshot_tag, &vid);
-	switch (ret) {
-	case SD_RES_NO_TAG:
-		break;
-	case SD_RES_SUCCESS:
-		fail_if_snapshot = true;
-		break;
-	default:
-		sd_err("Failed to create snapshot for %s: %s",
-			vdiname, sd_strerror(ret));
-		return EXIT_FAILURE;
-	}
-
-	if (fail_if_snapshot) {
-		ret = dog_read_object(vid_to_vdi_oid(vid), inode,
-				      SD_INODE_HEADER_SIZE, 0, true);
-		if (ret != EXIT_SUCCESS)
-			return ret;
-
-		if (vdi_is_snapshot(inode)) {
+	if (vdi_cmd_data.snapshot_tag[0]) {
+		ret = find_vdi_name(vdiname, 0, vdi_cmd_data.snapshot_tag,
+				    &vid);
+		switch (ret) {
+		case SD_RES_NO_VDI:
+			sd_err("Failed to create snapshot for %s: %s",
+			       vdiname, sd_strerror(ret));
+			return EXIT_FAILURE;
+		case SD_RES_NO_TAG:
+			break;
+		default:
 			sd_err("Failed to create snapshot for %s, maybe "
 			       "snapshot id (%d) or tag (%s) is existed",
 			       vdiname, vdi_cmd_data.snapshot_id,
 			       vdi_cmd_data.snapshot_tag);
 			return EXIT_FAILURE;
 		}
-	} else {
-		ret = read_vdi_obj(vdiname, 0, "", &vid, inode,
-				   SD_INODE_HEADER_SIZE);
-		if (ret != EXIT_SUCCESS)
-			return ret;
 	}
+
+	ret = read_vdi_obj(vdiname, 0, "", &vid, inode, SD_INODE_HEADER_SIZE);
+	if (ret != EXIT_SUCCESS)
+		return ret;
 
 	if (inode->store_policy) {
 		sd_err("creating a snapshot of hypervolume is not supported");
