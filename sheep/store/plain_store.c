@@ -207,7 +207,6 @@ static int init_vdi_state(uint64_t oid, const char *wd, uint32_t epoch)
 		       "wat %s", oid, epoch, wd);
 		goto out;
 	}
-	add_vdi_state(oid_to_vid(oid), vdi_is_snapshot(inode));
 	atomic_set_bit(oid_to_vid(oid), sys->vdi_inuse);
 
 	ret = SD_RES_SUCCESS;

@@ -351,7 +351,6 @@ uint32_t get_vdi_object_size(uint32_t vid);
 uint8_t get_vdi_block_size_shift(uint32_t vid);
 int get_obj_copy_number(uint64_t oid, int nr_zones);
 int get_req_copy_number(struct request *req);
-int add_vdi_state(uint32_t vid, bool snapshot);
 int vdi_exist(uint32_t vid);
 int vdi_create(const struct vdi_iocb *iocb, uint32_t *new_vid);
 int vdi_snapshot(const struct vdi_iocb *iocb, uint32_t *new_vid);
@@ -384,7 +383,7 @@ struct vnode_info *get_vnode_info_epoch(uint32_t epoch,
 int get_nodes_epoch(uint32_t epoch, struct vnode_info *cur_vinfo,
 		    struct sd_node *nodes, int len);
 
-void wait_get_vdis_done(void);
+void wait_get_vdi_bitmap_done(void);
 
 int get_nr_copies(struct vnode_info *vnode_info);
 

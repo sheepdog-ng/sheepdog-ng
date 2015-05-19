@@ -79,8 +79,8 @@ static bool vid_is_snapshot(uint32_t vid)
 	sd_rw_unlock(&vdi_state_lock);
 
 	if (!entry) {
-		sd_err("No VDI entry for %" PRIx32 " found", vid);
-		return 0;
+		sd_debug("No VDI entry for %" PRIx32 " found", vid);
+		return false;
 	}
 
 	return entry->snapshot;
@@ -132,7 +132,7 @@ int get_req_copy_number(struct request *req)
 	return nr_copies;
 }
 
-int add_vdi_state(uint32_t vid, bool snapshot)
+static int add_vdi_state(uint32_t vid, bool snapshot)
 {
 	struct vdi_state_entry *entry, *old;
 
@@ -152,39 +152,6 @@ int add_vdi_state(uint32_t vid, bool snapshot)
 
 	sd_rw_unlock(&vdi_state_lock);
 
-	return SD_RES_SUCCESS;
-}
-
-int fill_vdi_state_list(const struct sd_req *hdr,
-			struct sd_rsp *rsp, void *data)
-{
-#define DEFAULT_VDI_STATE_COUNT 512
-	int last = 0, end = DEFAULT_VDI_STATE_COUNT;
-	struct vdi_state_entry *entry;
-	struct vdi_state *vs = xzalloc(end * sizeof(struct vdi_state));
-
-	sd_read_lock(&vdi_state_lock);
-	rb_for_each_entry(entry, &vdi_state_root, node) {
-		if (last >= end) {
-			end *= 2;
-			vs = xrealloc(vs, end * sizeof(struct vdi_state));
-		}
-
-		vs[last].vid = entry->vid;
-		vs[last].snapshot = entry->snapshot;
-
-		last++;
-	}
-	sd_rw_unlock(&vdi_state_lock);
-
-	if (hdr->data_length < last * sizeof(struct vdi_state)) {
-		free(vs);
-		return SD_RES_BUFFER_SMALL;
-	}
-
-	rsp->data_length = last * sizeof(struct vdi_state);
-	memcpy(data, vs, rsp->data_length);
-	free(vs);
 	return SD_RES_SUCCESS;
 }
 
@@ -632,29 +599,6 @@ int vdi_lookup(const struct vdi_iocb *iocb, struct vdi_info *info)
 	return fill_vdi_info(left, right, iocb, info);
 }
 
-static int notify_vdi_add(uint32_t vdi_id, uint32_t nr_copies, uint32_t old_vid,
-			  uint8_t copy_policy, uint8_t block_size_shift)
-{
-	int ret;
-	struct sd_req hdr;
-
-	sd_init_req(&hdr, SD_OP_NOTIFY_VDI_ADD);
-	hdr.vdi_state.old_vid = old_vid;
-	hdr.vdi_state.new_vid = vdi_id;
-	hdr.vdi_state.copies = nr_copies;
-	hdr.vdi_state.set_bitmap = false;
-	hdr.vdi_state.copy_policy = copy_policy;
-	hdr.vdi_state.block_size_shift = block_size_shift;
-
-	ret = exec_local_req(&hdr, NULL);
-	if (ret != SD_RES_SUCCESS)
-		sd_err("fail to notify vdi add event(%" PRIx32 ", %d, %" PRIx32
-		       ", %"PRIu8 ")", vdi_id, nr_copies,
-		       old_vid, block_size_shift);
-
-	return ret;
-}
-
 static void vdi_flush(uint32_t vid)
 {
 	struct sd_req hdr;
@@ -700,10 +644,6 @@ int vdi_create(const struct vdi_iocb *iocb, uint32_t *new_vid)
 	if (info.snapid == 0)
 		info.snapid = 1;
 	*new_vid = info.free_bit;
-	ret = notify_vdi_add(*new_vid, iocb->nr_copies, info.vid,
-			     iocb->copy_policy, iocb->block_size_shift);
-	if (ret != SD_RES_SUCCESS)
-		return ret;
 
 	if (iocb->base_vid == 0)
 		return create_vdi(iocb, info.snapid, *new_vid);
@@ -740,15 +680,37 @@ int vdi_snapshot(const struct vdi_iocb *iocb, uint32_t *new_vid)
 
 	sd_assert(info.snapid > 0);
 	*new_vid = info.free_bit;
-	ret = notify_vdi_add(*new_vid, iocb->nr_copies, info.vid,
-			     iocb->copy_policy, iocb->block_size_shift);
 	if (ret != SD_RES_SUCCESS)
 		return ret;
 
-	if (iocb->base_vid == info.vid)
-		return snapshot_vdi(iocb, info.snapid, *new_vid,
-				    iocb->base_vid);
-	else
+	if (iocb->base_vid == info.vid) {
+		ret = snapshot_vdi(iocb, info.snapid, *new_vid,
+				   iocb->base_vid);
+		if (ret != SD_RES_SUCCESS)
+			return ret;
+		/*
+		 * vdi state is a private state of this node that is never
+		 * synced up with other nodes, so make sure you know of it
+		 * before you implement any useful featurs that might need a
+		 * syncd up states.
+		 *
+		 * QEMU client's online snapshot logic:
+		 * qemu-img snapshot -> tell connected sheep to make working as
+		 *                      snapshot
+		 * sheep   --> make the working vdi as snapshot
+		 * QEMU VM --> get the SD_RES_READONLY while it is write to the
+		 *             working vdi.
+		 * QEMU VM --> reload new working vdi, switch to it.
+		 *
+		 * It only needs the connected sheep to return SD_RES_READONLY,
+		 * so we can add a private state to the connected sheep and no
+		 * need to sync it with other nodes. If other node want to know
+		 * whether some vdi is snapshot or not, just read the inode
+		 * directly.
+		 */
+		add_vdi_state(iocb->base_vid, true);
+		return ret;
+	} else
 		return rebase_vdi(iocb, info.snapid, *new_vid, iocb->base_vid,
 				  info.vid);
 }

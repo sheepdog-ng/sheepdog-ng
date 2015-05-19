@@ -1115,7 +1115,7 @@ static void prepare_object_list(struct work *work)
 		return;
 
 	sd_debug("%u", rw->epoch);
-	wait_get_vdis_done();
+	wait_get_vdi_bitmap_done();
 
 	nodes = xmalloc(sizeof(struct sd_node) * nr_nodes);
 	nodes_to_buffer(&rw->cur_vinfo->nroot, nodes);

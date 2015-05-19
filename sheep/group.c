@@ -473,48 +473,26 @@ static enum sd_status cluster_wait_check(const struct sd_node *joining,
 	return sys->cinfo.status;
 }
 
-static int get_vdis_from(struct sd_node *node)
+static int get_vdi_bitmap_from(struct sd_node *node)
 {
 	struct sd_req hdr;
-	struct sd_rsp *rsp = (struct sd_rsp *)&hdr;
-	struct vdi_state *vs = NULL;
+	static DECLARE_BITMAP(tmp_vdi_inuse, SD_NR_VDIS);
 	int i, ret;
-	unsigned int rlen;
-	int count;
+	unsigned int rlen = sizeof(tmp_vdi_inuse);
 
-	if (node_is_local(node))
-		return SD_RES_SUCCESS;
-
-#define DEFAULT_VDI_STATE_COUNT 512
-	rlen = DEFAULT_VDI_STATE_COUNT * sizeof(struct vdi_state);
-	vs = xzalloc(rlen);
-retry:
-	sd_init_req(&hdr, SD_OP_GET_VDI_COPIES);
+	sd_init_req(&hdr, SD_OP_READ_VDIS);
 	hdr.data_length = rlen;
 	hdr.epoch = sys_epoch();
-	ret = sheep_exec_req(&node->nid, &hdr, (char *)vs);
-	switch (ret) {
-	case SD_RES_SUCCESS:
-		break;
-	case SD_RES_BUFFER_SMALL:
-		rlen *= 2;
-		vs = xrealloc(vs, rlen);
-		goto retry;
-	default:
-		goto out;
-	}
+	ret = sheep_exec_req(&node->nid, &hdr, (char *)tmp_vdi_inuse);
+	if (ret != SD_RES_SUCCESS)
+		return ret;
 
-	count = rsp->data_length / sizeof(*vs);
-	for (i = 0; i < count; i++) {
-		atomic_set_bit(vs[i].vid, sys->vdi_inuse);
-		add_vdi_state(vs[i].vid, vs[i].snapshot);
-	}
-out:
-	free(vs);
+        for (i = 0; i < ARRAY_SIZE(sys->vdi_inuse); i++)
+                sys->vdi_inuse[i] |= tmp_vdi_inuse[i];
 	return ret;
 }
 
-static void do_get_vdis(struct work *work)
+static void do_get_vdi_bitmap(struct work *work)
 {
 	struct get_vdis_work *w =
 		container_of(work, struct get_vdis_work, work);
@@ -524,7 +502,7 @@ static void do_get_vdis(struct work *work)
 	if (!node_is_local(&w->joined)) {
 		sd_debug("try to get vdi bitmap from %s",
 			 node_to_str(&w->joined));
-		ret = get_vdis_from(&w->joined);
+		ret = get_vdi_bitmap_from(&w->joined);
 		if (ret != SD_RES_SUCCESS) {
 			if (sys->cinfo.status == SD_STATUS_OK)
 				/*
@@ -547,7 +525,7 @@ static void do_get_vdis(struct work *work)
 			continue;
 
 		sd_debug("try to get vdi bitmap from %s", node_to_str(n));
-		ret = get_vdis_from(n);
+		ret = get_vdi_bitmap_from(n);
 		if (ret != SD_RES_SUCCESS)
 			/*
 			 * It means this sheep has missing vdi bitmap, and
@@ -562,13 +540,13 @@ static void do_get_vdis(struct work *work)
 
 		/*
 		 * TODO: If the target node has a valid vdi bitmap (the node has
-		 * already called do_get_vdis against all the nodes), we can
+		 * already called do_get_vdi_bitmap against all the nodes), we can
 		 * exit this loop here.
 		 */
 	}
 }
 
-static void get_vdis_done(struct work *work)
+static void get_vdi_bitmap_done(struct work *work)
 {
 	struct get_vdis_work *w =
 		container_of(work, struct get_vdis_work, work);
@@ -654,7 +632,8 @@ static void setup_backend_store(const struct cluster_info *cinfo)
 	}
 }
 
-static void get_vdis(const struct rb_root *nroot, const struct sd_node *joined)
+static void get_vdi_bitmap(const struct rb_root *nroot,
+			   const struct sd_node *joined)
 {
 	struct get_vdis_work *w;
 
@@ -664,12 +643,12 @@ static void get_vdis(const struct rb_root *nroot, const struct sd_node *joined)
 	rb_copy(nroot, struct sd_node, rb, &w->nroot, node_cmp);
 	refcount_inc(&nr_get_vdis_works);
 
-	w->work.fn = do_get_vdis;
-	w->work.done = get_vdis_done;
+	w->work.fn = do_get_vdi_bitmap;
+	w->work.done = get_vdi_bitmap_done;
 	queue_work(sys->block_wqueue, &w->work);
 }
 
-void wait_get_vdis_done(void)
+void wait_get_vdi_bitmap_done(void)
 {
 	sd_debug("waiting for vdi list");
 
@@ -732,7 +711,7 @@ static void update_cluster_info(const struct cluster_info *cinfo,
 	old_vnode_info = main_thread_get(current_vnode_info);
 	main_thread_set(current_vnode_info, alloc_vnode_info(nroot));
 
-	get_vdis(nroot, joined);
+	get_vdi_bitmap(nroot, joined);
 
 	if (cinfo->status == SD_STATUS_OK) {
 		if (!is_cluster_formatted())

@@ -459,12 +459,6 @@ static int local_read_vdis(const struct sd_req *req, struct sd_rsp *rsp,
 	return read_vdis(data, req->data_length, &rsp->data_length);
 }
 
-static int local_get_vdi_copies(const struct sd_req *req, struct sd_rsp *rsp,
-				void *data, const struct sd_node *sender)
-{
-	return fill_vdi_state_list(req, rsp, data);
-}
-
 static int local_stat_sheep(struct request *req)
 {
 	struct sd_rsp *rsp = &req->rp;
@@ -685,14 +679,8 @@ static int cluster_cleanup(const struct sd_req *req, struct sd_rsp *rsp,
 static int cluster_notify_vdi_add(const struct sd_req *req, struct sd_rsp *rsp,
 				  void *data, const struct sd_node *sender)
 {
-	if (req->vdi_state.old_vid)
-		/* make the previous working vdi a snapshot */
-		add_vdi_state(req->vdi_state.old_vid, true);
-
 	if (req->vdi_state.set_bitmap)
 		atomic_set_bit(req->vdi_state.new_vid, sys->vdi_inuse);
-
-	add_vdi_state(req->vdi_state.new_vid, false);
 
 	return SD_RES_SUCCESS;
 }
@@ -785,13 +773,10 @@ static int cluster_alter_cluster_copy(const struct sd_req *req,
 static int cluster_alter_vdi_copy(const struct sd_req *req, struct sd_rsp *rsp,
 				  void *data, const struct sd_node *sender)
 {
-	if (req->cluster.copy_policy != 0)
-		return SD_RES_INVALID_PARMS;
-
-	uint32_t vid = req->vdi_state.new_vid;
 	struct vnode_info *vinfo;
 
-	add_vdi_state(vid, false);
+	if (req->cluster.copy_policy != 0)
+		return SD_RES_INVALID_PARMS;
 
 	vinfo = get_vnode_info();
 	start_recovery(vinfo, vinfo, false);
@@ -1589,13 +1574,6 @@ static struct sd_op_template sd_ops[] = {
 		.type = SD_OP_TYPE_LOCAL,
 		.force = true,
 		.process_main = local_read_vdis,
-	},
-
-	[SD_OP_GET_VDI_COPIES] = {
-		.name = "GET_VDI_COPIES",
-		.type = SD_OP_TYPE_LOCAL,
-		.force = true,
-		.process_main = local_get_vdi_copies,
 	},
 
 	[SD_OP_GET_NODE_LIST] = {

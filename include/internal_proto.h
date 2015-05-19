@@ -80,7 +80,7 @@
 /* #define SD_OP_SET_CACHE_SIZE 0xA7 deleted */
 #define SD_OP_ENABLE_RECOVER 0xA8
 #define SD_OP_DISABLE_RECOVER 0xA9
-#define SD_OP_GET_VDI_COPIES 0xAB
+/* #define SD_OP_GET_VDI_COPIES 0xAB deleted */
 #define SD_OP_COMPLETE_RECOVERY 0xAC
 #define SD_OP_FLUSH_NODES 0xAD
 #define SD_OP_FLUSH_PEER 0xAE
