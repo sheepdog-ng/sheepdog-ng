@@ -13,7 +13,6 @@
 
 struct vdi_state_entry {
 	uint32_t vid;
-	uint8_t block_size_shift;
 	bool snapshot;
 	struct rb_node node;
 };
@@ -108,40 +107,12 @@ int get_vdi_copy_policy(uint32_t vid)
 
 uint32_t get_vdi_object_size(uint32_t vid)
 {
-	struct vdi_state_entry *entry;
-	uint32_t object_size;
-
-	sd_read_lock(&vdi_state_lock);
-	entry = vdi_state_search(&vdi_state_root, vid);
-	sd_rw_unlock(&vdi_state_lock);
-
-	if (!entry) {
-		object_size = UINT32_C(1) << sys->cinfo.block_size_shift;
-		sd_alert("object_size for %" PRIx32 " not found, set %" PRIu32,
-			 vid, object_size);
-		return object_size;
-	}
-
-	object_size = UINT32_C(1) << entry->block_size_shift;
-	return object_size;
+	return UINT32_C(1) << get_vdi_block_size_shift(vid);
 }
 
 uint8_t get_vdi_block_size_shift(uint32_t vid)
 {
-	struct vdi_state_entry *entry;
-
-	sd_read_lock(&vdi_state_lock);
-	entry = vdi_state_search(&vdi_state_root, vid);
-	sd_rw_unlock(&vdi_state_lock);
-
-	if (!entry) {
-		sd_alert("block_size_shift for %" PRIx32
-			 " not found, set %" PRIu8, vid,
-			 sys->cinfo.block_size_shift);
-		return sys->cinfo.block_size_shift;
-	}
-
-	return entry->block_size_shift;
+	return sys->cinfo.block_size_shift;
 }
 
 int get_obj_copy_number(uint64_t oid, int nr_zones)
@@ -161,17 +132,15 @@ int get_req_copy_number(struct request *req)
 	return nr_copies;
 }
 
-int add_vdi_state(uint32_t vid, bool snapshot, uint8_t block_size_shift)
+int add_vdi_state(uint32_t vid, bool snapshot)
 {
 	struct vdi_state_entry *entry, *old;
 
 	entry = xzalloc(sizeof(*entry));
 	entry->vid = vid;
 	entry->snapshot = snapshot;
-	entry->block_size_shift = block_size_shift;
 
-	sd_debug("%" PRIx32 ", %"PRIu8,
-		 vid, block_size_shift);
+	sd_debug("%" PRIx32, vid);
 
 	sd_write_lock(&vdi_state_lock);
 	old = vdi_state_insert(&vdi_state_root, entry);
@@ -179,7 +148,6 @@ int add_vdi_state(uint32_t vid, bool snapshot, uint8_t block_size_shift)
 		free(entry);
 		entry = old;
 		entry->snapshot = snapshot;
-		entry->block_size_shift = block_size_shift;
 	}
 
 	sd_rw_unlock(&vdi_state_lock);
@@ -204,7 +172,6 @@ int fill_vdi_state_list(const struct sd_req *hdr,
 
 		vs[last].vid = entry->vid;
 		vs[last].snapshot = entry->snapshot;
-		vs[last].block_size_shift = entry->block_size_shift;
 
 		last++;
 	}
