@@ -352,7 +352,7 @@ uint8_t get_vdi_block_size_shift(uint32_t vid);
 int get_obj_copy_number(uint64_t oid, int nr_zones);
 int get_req_copy_number(struct request *req);
 int add_vdi_state(uint32_t vid, bool snapshot,
-		  uint8_t, uint8_t block_size_shift);
+		  uint8_t block_size_shift);
 int vdi_exist(uint32_t vid);
 int vdi_create(const struct vdi_iocb *iocb, uint32_t *new_vid);
 int vdi_snapshot(const struct vdi_iocb *iocb, uint32_t *new_vid);
@@ -362,11 +362,10 @@ void clean_vdi_state(void);
 int sd_delete_vdi(const char *name);
 int sd_lookup_vdi(const char *name, uint32_t *vid);
 int sd_create_hyper_volume(const char *name, uint32_t *vdi_id);
+int ec_max_data_strip(void);
 
 bool vdi_lock(uint32_t vid, const struct node_id *owner);
 bool vdi_unlock(uint32_t vid, const struct node_id *owner);
-
-extern int ec_max_data_strip;
 
 int read_vdis(char *data, int len, unsigned int *rsp_len);
 

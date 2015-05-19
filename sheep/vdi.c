@@ -15,7 +15,6 @@ struct vdi_state_entry {
 	uint32_t vid;
 	uint8_t block_size_shift;
 	bool snapshot;
-	uint8_t copy_policy;
 	struct rb_node node;
 };
 
@@ -27,7 +26,17 @@ static struct sd_rw_lock vdi_state_lock = SD_RW_LOCK_INITIALIZER;
  * nr_zones < it, we don't purge the stale objects because for erasure coding,
  * there is only one copy of data.
  */
-int ec_max_data_strip;
+int ec_max_data_strip(void)
+{
+	int d;
+
+	if (!sys->cinfo.copy_policy)
+		return 0;
+
+	ec_policy_to_dp(sys->cinfo.copy_policy, &d, NULL);
+
+	return d;
+}
 
 int sheep_bnode_writer(uint64_t oid, void *mem, unsigned int len,
 		       uint64_t offset, uint32_t flags, int copies,
@@ -94,19 +103,7 @@ int get_vdi_copy_number(uint32_t vid)
 
 int get_vdi_copy_policy(uint32_t vid)
 {
-	struct vdi_state_entry *entry;
-
-	sd_read_lock(&vdi_state_lock);
-	entry = vdi_state_search(&vdi_state_root, vid);
-	sd_rw_unlock(&vdi_state_lock);
-
-	if (!entry) {
-		sd_alert("copy policy for %" PRIx32 " not found, set %d", vid,
-			 sys->cinfo.copy_policy);
-		return sys->cinfo.copy_policy;
-	}
-
-	return entry->copy_policy;
+	return sys->cinfo.copy_policy;
 }
 
 uint32_t get_vdi_object_size(uint32_t vid)
@@ -164,30 +161,17 @@ int get_req_copy_number(struct request *req)
 	return nr_copies;
 }
 
-int add_vdi_state(uint32_t vid, bool snapshot,
-		  uint8_t cp, uint8_t block_size_shift)
+int add_vdi_state(uint32_t vid, bool snapshot, uint8_t block_size_shift)
 {
 	struct vdi_state_entry *entry, *old;
 
 	entry = xzalloc(sizeof(*entry));
 	entry->vid = vid;
 	entry->snapshot = snapshot;
-	entry->copy_policy = cp;
 	entry->block_size_shift = block_size_shift;
 
-	if (cp) {
-		int d;
-		static struct sd_mutex m = SD_MUTEX_INITIALIZER;
-
-		ec_policy_to_dp(cp, &d, NULL);
-
-		sd_mutex_lock(&m);
-		ec_max_data_strip = max(d, ec_max_data_strip);
-		sd_mutex_unlock(&m);
-	}
-
-	sd_debug("%" PRIx32 ", %d, %"PRIu8,
-		 vid, cp, block_size_shift);
+	sd_debug("%" PRIx32 ", %"PRIu8,
+		 vid, block_size_shift);
 
 	sd_write_lock(&vdi_state_lock);
 	old = vdi_state_insert(&vdi_state_root, entry);
@@ -195,7 +179,6 @@ int add_vdi_state(uint32_t vid, bool snapshot,
 		free(entry);
 		entry = old;
 		entry->snapshot = snapshot;
-		entry->copy_policy = cp;
 		entry->block_size_shift = block_size_shift;
 	}
 
@@ -221,7 +204,6 @@ int fill_vdi_state_list(const struct sd_req *hdr,
 
 		vs[last].vid = entry->vid;
 		vs[last].snapshot = entry->snapshot;
-		vs[last].copy_policy = entry->copy_policy;
 		vs[last].block_size_shift = entry->block_size_shift;
 
 		last++;
