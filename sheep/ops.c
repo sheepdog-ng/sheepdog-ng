@@ -688,14 +688,13 @@ static int cluster_notify_vdi_add(const struct sd_req *req, struct sd_rsp *rsp,
 	if (req->vdi_state.old_vid)
 		/* make the previous working vdi a snapshot */
 		add_vdi_state(req->vdi_state.old_vid,
-			      get_vdi_copy_number(req->vdi_state.old_vid),
 			      true, req->vdi_state.copy_policy,
 			      get_vdi_block_size_shift(req->vdi_state.old_vid));
 
 	if (req->vdi_state.set_bitmap)
 		atomic_set_bit(req->vdi_state.new_vid, sys->vdi_inuse);
 
-	add_vdi_state(req->vdi_state.new_vid, req->vdi_state.copies, false,
+	add_vdi_state(req->vdi_state.new_vid, false,
 		      req->vdi_state.copy_policy,
 		      req->vdi_state.block_size_shift);
 
@@ -794,11 +793,10 @@ static int cluster_alter_vdi_copy(const struct sd_req *req, struct sd_rsp *rsp,
 		return SD_RES_INVALID_PARMS;
 
 	uint32_t vid = req->vdi_state.new_vid;
-	int nr_copies = req->vdi_state.copies;
 	uint32_t block_size_shift = req->vdi_state.block_size_shift;
 	struct vnode_info *vinfo;
 
-	add_vdi_state(vid, nr_copies, false, 0, block_size_shift);
+	add_vdi_state(vid, false, 0, block_size_shift);
 
 	vinfo = get_vnode_info();
 	start_recovery(vinfo, vinfo, false);

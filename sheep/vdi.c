@@ -13,7 +13,6 @@
 
 struct vdi_state_entry {
 	uint32_t vid;
-	unsigned int nr_copies;
 	uint8_t block_size_shift;
 	bool snapshot;
 	uint8_t copy_policy;
@@ -90,19 +89,7 @@ bool oid_is_readonly(uint64_t oid)
 
 int get_vdi_copy_number(uint32_t vid)
 {
-	struct vdi_state_entry *entry;
-
-	sd_read_lock(&vdi_state_lock);
-	entry = vdi_state_search(&vdi_state_root, vid);
-	sd_rw_unlock(&vdi_state_lock);
-
-	if (!entry) {
-		sd_alert("copy number for %" PRIx32 " not found, set %d", vid,
-			 sys->cinfo.nr_copies);
-		return sys->cinfo.nr_copies;
-	}
-
-	return entry->nr_copies;
+	return sys->cinfo.nr_copies;
 }
 
 int get_vdi_copy_policy(uint32_t vid)
@@ -177,14 +164,13 @@ int get_req_copy_number(struct request *req)
 	return nr_copies;
 }
 
-int add_vdi_state(uint32_t vid, int nr_copies, bool snapshot,
+int add_vdi_state(uint32_t vid, bool snapshot,
 		  uint8_t cp, uint8_t block_size_shift)
 {
 	struct vdi_state_entry *entry, *old;
 
 	entry = xzalloc(sizeof(*entry));
 	entry->vid = vid;
-	entry->nr_copies = nr_copies;
 	entry->snapshot = snapshot;
 	entry->copy_policy = cp;
 	entry->block_size_shift = block_size_shift;
@@ -200,15 +186,14 @@ int add_vdi_state(uint32_t vid, int nr_copies, bool snapshot,
 		sd_mutex_unlock(&m);
 	}
 
-	sd_debug("%" PRIx32 ", %d, %d, %"PRIu8,
-		 vid, nr_copies, cp, block_size_shift);
+	sd_debug("%" PRIx32 ", %d, %"PRIu8,
+		 vid, cp, block_size_shift);
 
 	sd_write_lock(&vdi_state_lock);
 	old = vdi_state_insert(&vdi_state_root, entry);
 	if (old) {
 		free(entry);
 		entry = old;
-		entry->nr_copies = nr_copies;
 		entry->snapshot = snapshot;
 		entry->copy_policy = cp;
 		entry->block_size_shift = block_size_shift;
@@ -235,7 +220,6 @@ int fill_vdi_state_list(const struct sd_req *hdr,
 		}
 
 		vs[last].vid = entry->vid;
-		vs[last].nr_copies = entry->nr_copies;
 		vs[last].snapshot = entry->snapshot;
 		vs[last].copy_policy = entry->copy_policy;
 		vs[last].block_size_shift = entry->block_size_shift;

@@ -507,7 +507,7 @@ retry:
 	count = rsp->data_length / sizeof(*vs);
 	for (i = 0; i < count; i++) {
 		atomic_set_bit(vs[i].vid, sys->vdi_inuse);
-		add_vdi_state(vs[i].vid, vs[i].nr_copies, vs[i].snapshot,
+		add_vdi_state(vs[i].vid, vs[i].snapshot,
 			      vs[i].copy_policy, vs[i].block_size_shift);
 	}
 out:
