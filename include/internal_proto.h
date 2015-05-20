@@ -104,13 +104,13 @@
 /* #define SD_OP_ALTER_VDI_COPY	0xC0 */
 #define SD_OP_DECREF_OBJ     0xC1
 #define SD_OP_DECREF_PEER    0xC2
-#define SD_OP_PREVENT_INODE_UPDATE    0xC3
-#define SD_OP_ALLOW_INODE_UPDATE      0xC4
+/* #define SD_OP_PREVENT_INODE_UPDATE    0xC3 */
+/* #define SD_OP_ALLOW_INODE_UPDATE      0xC4 */
 #define SD_OP_REPAIR_REPLICA	0xC5
 #define SD_OP_OIDS_EXIST	0xC6
-#define SD_OP_VDI_STATE_SNAPSHOT_CTL  0xC7
-#define SD_OP_INODE_COHERENCE 0xC8
-#define SD_OP_READ_DEL_VDIS  0xC9
+/* #define SD_OP_VDI_STATE_SNAPSHOT_CTL  0xC7 */
+/* #define SD_OP_INODE_COHERENCE 0xC8 */
+/* #define SD_OP_READ_DEL_VDIS  0xC9 */
 
 /* internal flags for hdr.flags, must be above 0x80 */
 #define SD_FLAG_CMD_RECOVERY 0x0080
