@@ -146,9 +146,6 @@ const char *my_exe_path(void);
 int split_path(const char *path, size_t nr_segs, char **segs);
 void make_path(char *path, size_t size, size_t nr_segs, const char **segs);
 
-void find_zero_blocks(const void *buf, uint64_t *poffset, uint32_t *plen);
-void trim_zero_blocks(void *buf, uint64_t *poffset, uint32_t *plen);
-
 /* a type safe version of qsort() */
 #define xqsort(base, nmemb, compar)					\
 ({									\

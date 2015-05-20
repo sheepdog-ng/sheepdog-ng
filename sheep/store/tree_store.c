@@ -83,44 +83,12 @@ bool tree_exist(uint64_t oid, uint8_t ec_index)
 	return md_exist(oid, ec_index, path);
 }
 
-/* Trim zero blocks of the beginning and end of the object. */
-static int tree_trim(int fd, uint64_t oid, const struct siocb *iocb,
-			uint64_t *poffset, uint32_t *plen)
-{
-	trim_zero_blocks(iocb->buf, poffset, plen);
-
-	if (iocb->offset < *poffset) {
-		sd_debug("discard between %d, %ld, %" PRIx64, iocb->offset,
-			 *poffset, oid);
-
-		if (discard(fd, iocb->offset, *poffset) < 0)
-			return -1;
-	}
-
-	if (*poffset + *plen < iocb->offset + iocb->length) {
-		uint64_t end = iocb->offset + iocb->length;
-		if (end == get_objsize(oid))
-			/* This is necessary to punch the last block */
-			end = round_up(end, BLOCK_SIZE);
-		sd_debug("discard between %ld, %ld, %" PRIx64, *poffset + *plen,
-			 end, oid);
-
-		if (discard(fd, *poffset + *plen, end) < 0)
-			return -1;
-	}
-
-	return 0;
-}
-
 int tree_write(uint64_t oid, const struct siocb *iocb)
 {
 	int flags = prepare_iocb(oid, iocb, false), fd,
 	    ret = SD_RES_SUCCESS;
 	char path[PATH_MAX];
 	ssize_t size;
-	uint32_t len = iocb->length;
-	uint64_t offset = iocb->offset;
-	static bool trim_is_supported = true;
 
 	if (iocb->epoch < sys_epoch()) {
 		sd_debug("%"PRIu32" sys %"PRIu32, iocb->epoch, sys_epoch());
@@ -141,16 +109,8 @@ int tree_write(uint64_t oid, const struct siocb *iocb)
 	if (unlikely(fd < 0))
 		return err_to_sderr(path, oid, errno);
 
-	if (trim_is_supported && is_sparse_object(oid)) {
-		if (tree_trim(fd, oid, iocb, &offset, &len) < 0) {
-			trim_is_supported = false;
-			offset = iocb->offset;
-			len = iocb->length;
-		}
-	}
-
-	size = xpwrite(fd, iocb->buf, len, offset);
-	if (unlikely(size != len)) {
+	size = xpwrite(fd, iocb->buf, iocb->length, iocb->offset);
+	if (unlikely(size != iocb->length)) {
 		sd_err("failed to write object %"PRIx64", path=%s, offset=%"
 		       PRId32", size=%"PRId32", result=%zd, %m", oid, path,
 		       iocb->offset, iocb->length, size);
@@ -352,7 +312,6 @@ int tree_create_and_write(uint64_t oid, const struct siocb *iocb)
 	int ret, fd;
 	uint32_t len = iocb->length;
 	size_t obj_size;
-	uint64_t offset = iocb->offset;
 
 	sd_debug("%"PRIx64, oid);
 	get_store_path(oid, iocb->ec_index, path);
@@ -377,21 +336,13 @@ int tree_create_and_write(uint64_t oid, const struct siocb *iocb)
 	}
 
 	obj_size = get_store_objsize(oid);
-
-	trim_zero_blocks(iocb->buf, &offset, &len);
-
-	if (offset != 0 || len != get_objsize(oid)) {
-		if (is_sparse_object(oid))
-			ret = xftruncate(fd, obj_size);
-		else
-			ret = prealloc(fd, obj_size);
-		if (ret < 0) {
-			ret = err_to_sderr(path, oid, errno);
-			goto out;
-		}
+	ret = prealloc(fd, obj_size);
+	if (ret < 0) {
+		ret = err_to_sderr(path, oid, errno);
+		goto out;
 	}
 
-	ret = xpwrite(fd, iocb->buf, len, offset);
+	ret = xpwrite(fd, iocb->buf, len, iocb->offset);
 	if (ret != len) {
 		sd_err("failed to write object. %m");
 		ret = err_to_sderr(path, oid, errno);

@@ -394,7 +394,6 @@ void queue_cluster_request(struct request *req);
 
 int prepare_iocb(uint64_t oid, const struct siocb *iocb, bool create);
 int err_to_sderr(const char *path, uint64_t oid, int err);
-int discard(int fd, uint64_t start, uint32_t end);
 bool store_id_match(enum store_id id);
 
 int update_epoch_log(uint32_t epoch, struct sd_node *nodes, size_t nr_nodes);

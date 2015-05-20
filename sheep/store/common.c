@@ -10,7 +10,6 @@
  */
 
 #include <libgen.h>
-#include <linux/falloc.h>
 
 #include "sheep_priv.h"
 
@@ -19,10 +18,6 @@ char *epoch_path;
 
 struct store_driver *sd_store;
 LIST_HEAD(store_drivers);
-
-#ifndef FALLOC_FL_PUNCH_HOLE
-#define FALLOC_FL_PUNCH_HOLE 0x02
-#endif
 
 #define sector_algined(x) ({ ((x) & (SECTOR_SIZE - 1)) == 0; })
 
@@ -85,21 +80,6 @@ int err_to_sderr(const char *path, uint64_t oid, int err)
 		sd_err("oid=%"PRIx64", %m", oid);
 		return md_handle_eio(dir);
 	}
-}
-
-int discard(int fd, uint64_t start, uint32_t end)
-{
-	int ret = xfallocate(fd, FALLOC_FL_KEEP_SIZE | FALLOC_FL_PUNCH_HOLE,
-			     start, end - start);
-	if (ret < 0) {
-		if (errno == ENOSYS || errno == EOPNOTSUPP)
-			sd_info("FALLOC_FL_PUNCH_HOLE is not supported "
-				"on this filesystem");
-		else
-			sd_err("failed to discard object, %m");
-	}
-
-	return ret;
 }
 
 bool store_id_match(enum store_id id)
