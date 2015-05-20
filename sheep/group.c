@@ -504,17 +504,8 @@ static void do_get_vdi_bitmap(struct work *work)
 			 node_to_str(&w->joined));
 		ret = get_vdi_bitmap_from(&w->joined);
 		if (ret != SD_RES_SUCCESS) {
-			if (sys->cinfo.status == SD_STATUS_OK)
-				/*
-				 * SD_STATUS_OK means enough zones are gathered,
-				 * so failed vdi bitmap collection isn't
-				 * critical
-				 */
-				sd_alert("failed to get vdi bitmap from %s",
-					 node_to_str(&w->joined));
-			else
-				panic("failed to get vdi bitmap from %s",
-				      node_to_str(&w->joined));
+			sd_err("failed to get vdi bitmap from %s",
+			       node_to_str(&w->joined));
 		}
 		return;
 	}
@@ -527,22 +518,8 @@ static void do_get_vdi_bitmap(struct work *work)
 		sd_debug("try to get vdi bitmap from %s", node_to_str(n));
 		ret = get_vdi_bitmap_from(n);
 		if (ret != SD_RES_SUCCESS)
-			/*
-			 * It means this sheep has missing vdi bitmap, and
-			 * reading bitmap from other sheep cannot be guaranteed
-			 * to success.
-			 *
-			 * Inconsistency of vdi bitmap between nodes is deathly
-			 * critical, so dying here is safer.
-			 */
-			panic("failed to get vdi bitmap from %s",
-			      node_to_str(n));
-
-		/*
-		 * TODO: If the target node has a valid vdi bitmap (the node has
-		 * already called do_get_vdi_bitmap against all the nodes), we can
-		 * exit this loop here.
-		 */
+			sd_err("failed to get vdi bitmap from %s",
+			       node_to_str(n));
 	}
 }
 
