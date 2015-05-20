@@ -144,8 +144,7 @@ struct vnode_info *alloc_vnode_info(const struct rb_root *nroot)
 		vnode_info->nr_nodes++;
 	}
 
-	if (is_cluster_autovnodes(&sys->cinfo))
-		recalculate_vnodes(&vnode_info->nroot);
+	recalculate_vnodes(&vnode_info->nroot);
 
 	if (is_cluster_diskmode(&sys->cinfo))
 		disks_to_vnodes(&vnode_info->nroot, &vnode_info->vroot);
@@ -927,20 +926,6 @@ static bool cluster_join_check(const struct cluster_info *cinfo)
 	if (!cluster_ctime_check(cinfo))
 		return false;
 
-	if (cinfo->ctime > 0 && sys->this_node.nr_vnodes != 0) {
-		if (!is_cluster_autovnodes(&sys->cinfo)
-			&& is_cluster_autovnodes(cinfo)) {
-			sd_err("failed to join for vnodes strategy unmatch. "
-				" cluster:fixed, joined:auto");
-			return false;
-		} else if (is_cluster_autovnodes(&sys->cinfo)
-			&& !is_cluster_autovnodes(cinfo)) {
-			sd_err("failed to join for vnodes strategy unmatch. "
-				" cluster:auto, joined:fixed");
-			return false;
-		}
-	}
-
 	/*
 	 * Sheepdog's recovery code assumes every node have the same epoch
 	 * history. But we don't check epoch history of joining node because:
@@ -962,13 +947,6 @@ main_fn void sd_accept_handler(const struct sd_node *joined,
 {
 	const struct cluster_info *cinfo = opaque;
 	struct sd_node *n;
-	uint16_t flags;
-
-	if (node_is_local(joined) && sys->gateway_only
-		&& sys->cinfo.ctime <= 0)
-		flags = cinfo->flags & SD_CLUSTER_FLAG_AUTO_VNODES;
-	else
-		flags = sys->cinfo.flags & SD_CLUSTER_FLAG_AUTO_VNODES;
 
 	if (node_is_local(joined) && !cluster_join_check(cinfo)) {
 		sd_err("failed to join Sheepdog");
@@ -976,9 +954,6 @@ main_fn void sd_accept_handler(const struct sd_node *joined,
 	}
 
 	cluster_info_copy(&sys->cinfo, cinfo);
-
-	sys->cinfo.flags &= ~SD_CLUSTER_FLAG_AUTO_VNODES;
-	sys->cinfo.flags |= flags;
 
 	sd_debug("join %s", node_to_str(joined));
 	rb_for_each_entry(n, nroot, rb) {
@@ -1050,7 +1025,7 @@ main_fn void sd_leave_handler(const struct sd_node *left,
 	sockfd_cache_del_node(&left->nid);
 }
 
-static void update_node_info(struct sd_node *node)
+static void update_node_size(struct sd_node *node)
 {
 	struct vnode_info *cur_vinfo = get_vnode_info();
 	struct sd_node *n = rb_search(&cur_vinfo->nroot, node, rb, node_cmp);
@@ -1058,10 +1033,6 @@ static void update_node_info(struct sd_node *node)
 	if (unlikely(!n))
 		panic("can't find %s", node_to_str(node));
 	n->space = node->space;
-
-	if (!is_cluster_autovnodes(&sys->cinfo))
-		n->nr_vnodes = node->nr_vnodes;
-
 	if (is_cluster_diskmode(&sys->cinfo)) {
 		memset(n->disks, 0, sizeof(struct disk_info) * DISK_MAX);
 		for (int i = 0; i < DISK_MAX; i++)
@@ -1090,14 +1061,14 @@ static void kick_node_recover(void)
 
 main_fn void sd_update_node_handler(struct sd_node *node)
 {
-	update_node_info(node);
+	update_node_size(node);
 	kick_node_recover();
 }
 
 int create_cluster(int port, int64_t zone, int nr_vnodes,
 		   bool explicit_addr)
 {
-	int nr_nodes = 0, ret, i, vnodes = 0;
+	int nr_nodes = 0, ret;
 
 	if (!sys->cdrv) {
 		sys->cdrv = find_cdrv(DEFAULT_CLUSTER_DRIVER);
@@ -1133,28 +1104,11 @@ int create_cluster(int port, int64_t zone, int nr_vnodes,
 	sys->cinfo.epoch = get_latest_epoch();
 	if (sys->cinfo.epoch) {
 		ret = epoch_log_read(sys->cinfo.epoch, sys->cinfo.nodes,
-			sizeof(sys->cinfo.nodes), &nr_nodes);
+				sizeof(sys->cinfo.nodes), &nr_nodes);
 		if (ret != SD_RES_SUCCESS)
 			return -1;
 		sys->cinfo.nr_nodes = nr_nodes;
 	}
-
-	if (!is_cluster_autovnodes(&sys->cinfo)) {
-		for (i = 0; i < nr_nodes; i++) {
-			if (!node_id_cmp(&sys->this_node.nid,
-					 &sys->cinfo.nodes[i].nid)) {
-				vnodes = sys->cinfo.nodes[i].nr_vnodes;
-				break;
-			}
-		}
-		if (sys->cinfo.epoch != 0 && sys->this_node.nr_vnodes != vnodes
-			&& !sys->gateway_only) {
-			sd_err("mismatch specified vnodes is compared with the previous. "
-				"previous vnodes:%d", vnodes);
-			return -1;
-		}
-	}
-
 	sys->cinfo.status = SD_STATUS_WAIT;
 
 	main_thread_set(pending_block_list,
