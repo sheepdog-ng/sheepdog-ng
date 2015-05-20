@@ -127,16 +127,6 @@ int tree_write(uint64_t oid, const struct siocb *iocb)
 		return SD_RES_OLD_NODE_VER;
 	}
 
-	if (uatomic_is_true(&sys->use_journal) &&
-	    unlikely(journal_write_store(oid, iocb->buf, iocb->length,
-					 iocb->offset, false))
-	    != SD_RES_SUCCESS) {
-		sd_err("turn off journaling");
-		uatomic_set_false(&sys->use_journal);
-		flags |= O_DSYNC;
-		sync();
-	}
-
 	get_store_path(oid, iocb->ec_index, path);
 
 	/*
@@ -368,16 +358,6 @@ int tree_create_and_write(uint64_t oid, const struct siocb *iocb)
 	get_store_path(oid, iocb->ec_index, path);
 	get_store_tmp_path(oid, iocb->ec_index, tmp_path);
 
-	if (uatomic_is_true(&sys->use_journal) &&
-	    journal_write_store(oid, iocb->buf, iocb->length,
-				iocb->offset, true)
-	    != SD_RES_SUCCESS) {
-		sd_err("turn off journaling");
-		uatomic_set_false(&sys->use_journal);
-		flags |= O_SYNC;
-		sync();
-	}
-
 	fd = open(tmp_path, flags, sd_def_fmode);
 	if (fd < 0) {
 		if (errno == EEXIST) {
@@ -427,7 +407,7 @@ int tree_create_and_write(uint64_t oid, const struct siocb *iocb)
 
 	close(fd);
 
-	if (uatomic_is_true(&sys->use_journal) || sys->nosync == true) {
+	if (sys->nosync == true) {
 		objlist_cache_insert(oid);
 		return SD_RES_SUCCESS;
 	}
@@ -598,9 +578,6 @@ int tree_format(void)
 int tree_remove_object(uint64_t oid, uint8_t ec_index)
 {
 	char path[PATH_MAX];
-
-	if (uatomic_is_true(&sys->use_journal))
-		journal_remove_object(oid);
 
 	get_store_path(oid, ec_index, path);
 

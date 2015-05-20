@@ -35,14 +35,6 @@ static const char ioaddr_help[] =
 "This tries to add a dedicated IO NIC of 192.168.1.1:7002 to transfer data.\n"
 "If IO NIC is down, sheep will fallback to non IO NIC to transfer data.\n";
 
-static const char journal_help[] =
-"Available arguments:\n"
-"\tsize=: size of the journal in megabyes\n"
-"\tdir=: path to the location of the journal (default: $STORE)\n"
-"\tskip: if specified, skip the recovery at startup\n"
-"\nExample:\n\t$ sheep -j dir=/journal,size=1G\n"
-"This tries to use /journal as the journal storage of the size 1G\n";
-
 static const char http_help[] =
 "Available arguments:\n"
 "\thost=: specify a host to communicate with http server (default: localhost)\n"
@@ -129,8 +121,6 @@ static struct sd_option sheep_options[] = {
 	{'h', "help", false, "display this help and exit"},
 	{'i', "ioaddr", true, "use separate network card to handle IO requests"
 	 " (default: disabled)", ioaddr_help},
-	{'j', "journal", true, "use journal file to log all the write "
-	 "operations. (default: disabled)", journal_help},
 	{'l', "log", true,
 	 "specify the log level, the log directory and the log format"
 	 "(log level default: 6 [SDOG_INFO])", log_help},
@@ -391,42 +381,6 @@ static int ionic_port_parser(const char *s)
 static struct option_parser ionic_parsers[] = {
 	{ "host=", ionic_host_parser },
 	{ "port=", ionic_port_parser },
-	{ NULL, NULL },
-};
-
-static char jpath[PATH_MAX];
-static bool jskip;
-static uint64_t jsize;
-
-static int journal_dir_parser(const char *s)
-{
-	snprintf(jpath, sizeof(jpath), "%s", s);
-	return 0;
-}
-
-static int journal_size_parser(const char *s)
-{
-	if (option_parse_size(s, &jsize) < 0)
-		return -1;
-#define MIN_JOURNAL_SIZE (64*1024*1024) /* 64M */
-	if (jsize < MIN_JOURNAL_SIZE) {
-		sd_err("invalid size %s, must be bigger than %u(M)",
-		       s, MIN_JOURNAL_SIZE/1024/1024);
-		return -1;
-	}
-	return 0;
-}
-
-static int journal_skip_parser(const char *s)
-{
-	jskip = true;
-	return 0;
-}
-
-static struct option_parser journal_parsers[] = {
-	{ "dir=", journal_dir_parser },
-	{ "size=", journal_size_parser },
-	{ "skip", journal_skip_parser },
 	{ NULL, NULL },
 };
 
@@ -745,15 +699,6 @@ int main(int argc, char **argv)
 				}
 			sys->this_node.nid.io_port = io_port;
 			break;
-		case 'j':
-			uatomic_set_true(&sys->use_journal);
-			if (option_parse(optarg, ",", journal_parsers) < 0)
-				exit(1);
-			if (!jsize) {
-				sd_err("you must specify size for journal");
-				exit(1);
-			}
-			break;
 		case 'b':
 			if (!inetaddr_is_valid(optarg))
 				exit(1);
@@ -906,17 +851,6 @@ int main(int argc, char **argv)
 		goto cleanup_log;
 	}
 
-	/* We should init journal file before backend init */
-	if (uatomic_is_true(&sys->use_journal)) {
-		if (!strlen(jpath))
-			/* internal journal */
-			memcpy(jpath, dir, strlen(dir));
-		sd_debug("%s, %"PRIu64", %d", jpath, jsize, jskip);
-		ret = journal_file_init(jpath, jsize, jskip);
-		if (ret)
-			goto cleanup_cluster;
-	}
-
 	init_fec();
 
 	/*
@@ -928,15 +862,15 @@ int main(int argc, char **argv)
 	 */
 	ret = create_work_queues();
 	if (ret)
-		goto cleanup_journal;
+		goto cleanup_cluster;
 
 	ret = sockfd_init();
 	if (ret)
-		goto cleanup_journal;
+		goto cleanup_cluster;
 
 	ret = init_store_driver(sys->gateway_only);
 	if (ret)
-		goto cleanup_journal;
+		goto cleanup_cluster;
 
 	if (sys->enable_object_cache) {
 		if (!strlen(ocpath))
@@ -944,23 +878,23 @@ int main(int argc, char **argv)
 			memcpy(ocpath, dir, strlen(dir));
 		ret = object_cache_init(ocpath);
 		if (ret)
-			goto cleanup_journal;
+			goto cleanup_cluster;
 	}
 
 	ret = trace_init();
 	if (ret)
-		goto cleanup_journal;
+		goto cleanup_cluster;
 
 	if (http_options && http_init(http_options) != 0)
-		goto cleanup_journal;
+		goto cleanup_cluster;
 
 	ret = nfs_init(NULL);
 	if (ret)
-		goto cleanup_journal;
+		goto cleanup_cluster;
 
 	if (pid_file && (create_pidfile(pid_file) != 0)) {
 		sd_err("failed to pid file '%s' - %m", pid_file);
-		goto cleanup_journal;
+		goto cleanup_cluster;
 	}
 
 	if (chdir(dir) < 0) {
@@ -982,12 +916,6 @@ int main(int argc, char **argv)
 cleanup_pid_file:
 	if (pid_file)
 		unlink(pid_file);
-
-cleanup_journal:
-	if (uatomic_is_true(&sys->use_journal)) {
-		sd_info("cleaning journal file");
-		clean_journal_file(jpath);
-	}
 
 cleanup_cluster:
 	leave_cluster();

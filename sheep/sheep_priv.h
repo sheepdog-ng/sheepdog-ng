@@ -166,7 +166,6 @@ struct system_info {
 	uint32_t object_cache_size;
 	bool object_cache_directio;
 
-	uatomic_bool use_journal;
 	bool backend_dio;
 	/* upgrade data layout before starting service if necessary*/
 	bool upgrade;
@@ -553,13 +552,6 @@ void sheep_put_sockfd(const struct node_id *, struct sockfd *);
 void sheep_del_sockfd(const struct node_id *, struct sockfd *);
 int sheep_exec_req(const struct node_id *nid, struct sd_req *hdr, void *data);
 bool sheep_need_retry(uint32_t epoch);
-
-/* journal_file.c */
-int journal_file_init(const char *path, size_t size, bool skip);
-void clean_journal_file(const char *p);
-int
-journal_write_store(uint64_t oid, const char *buf, size_t size, off_t, bool);
-int journal_remove_object(uint64_t oid);
 
 /* md.c */
 bool md_add_disk(const char *path, bool);

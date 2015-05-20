@@ -25,7 +25,7 @@ AM_CPPFLAGS		= -I$(top_builddir)/include -I$(top_srcdir)/include \
 sbin_PROGRAMS		= sheep
 
 sheep_SOURCES		= sheep.c group.c request.c gateway.c vdi.c \
-			  journal.c ops.c recovery.c cluster/local.c \
+			  ops.c recovery.c cluster/local.c \
 			  object_cache.c object_list_cache.c \
 			  store/common.c store/md.c \
 			  store/plain_store.c store/tree_store.c \

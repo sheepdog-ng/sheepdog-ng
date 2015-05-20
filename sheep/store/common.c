@@ -36,7 +36,7 @@ int prepare_iocb(uint64_t oid, const struct siocb *iocb, bool create)
 	int syncflag = create ? O_SYNC : O_DSYNC;
 	int flags = syncflag | O_RDWR;
 
-	if (uatomic_is_true(&sys->use_journal) || sys->nosync == true)
+	if (sys->nosync == true)
 		flags &= ~syncflag;
 
 	if (sys->backend_dio && iocb_is_aligned(iocb)) {
