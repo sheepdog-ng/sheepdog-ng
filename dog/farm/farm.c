@@ -129,7 +129,7 @@ static int create_active_vdis(void)
 		if (do_vdi_create(vdi->name,
 				  vdi->vdi_size,
 				  vdi->vdi_id, &new_vid,
-				  false, vdi->nr_copies,
+				  false,
 				  vdi->copy_policy,
 				  vdi->store_policy) < 0)
 			return -1;

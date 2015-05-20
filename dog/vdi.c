@@ -31,7 +31,6 @@ static struct sd_option vdi_options[] = {
 	{'x', "exclusive", false, "write in an exclusive mode"},
 	{'d', "delete", false, "delete a key"},
 	{'w', "writeback", false, "use writeback mode"},
-	{'c', "copies", true, "specify the data redundancy level"},
 	{'F', "from", true, "create a differential backup from the snapshot"},
 	{'f', "force", false, "do operation forcibly"},
 	{'y', "hyper", false, "create a hyper volume"},
@@ -48,12 +47,10 @@ static struct vdi_cmd_data {
 	bool exclusive;
 	bool delete;
 	bool prealloc;
-	int nr_copies;
 	bool writeback;
 	int from_snapshot_id;
 	char from_snapshot_tag[SD_MAX_VDI_TAG_LEN];
 	bool force;
-	uint8_t copy_policy;
 	uint8_t store_policy;
 	uint64_t oid;
 	bool no_share;
@@ -396,7 +393,7 @@ int read_vdi_obj(const char *vdiname, int snapid, const char *tag,
 
 int do_vdi_create(const char *vdiname, int64_t vdi_size,
 		  uint32_t base_vid, uint32_t *vdi_id, bool snapshot,
-		  uint8_t nr_copies, uint8_t copy_policy, uint8_t store_policy)
+		  uint8_t copy_policy, uint8_t store_policy)
 {
 	struct sd_req hdr;
 	struct sd_rsp *rsp = (struct sd_rsp *)&hdr;
@@ -413,7 +410,6 @@ int do_vdi_create(const char *vdiname, int64_t vdi_size,
 	hdr.vdi.base_vdi_id = base_vid;
 	hdr.vdi.snapid = snapshot ? 1 : 0;
 	hdr.vdi.vdi_size = vdi_size;
-	hdr.vdi.copies = nr_copies;
 	hdr.vdi.copy_policy = copy_policy;
 	hdr.vdi.store_policy = store_policy;
 
@@ -465,8 +461,7 @@ static int vdi_create(int argc, char **argv)
 		return EXIT_USAGE;
 	}
 
-	ret = do_vdi_create(vdiname, size, 0, &vid, false,
-			    vdi_cmd_data.nr_copies, vdi_cmd_data.copy_policy,
+	ret = do_vdi_create(vdiname, size, 0, &vid, false, 0,
 			    vdi_cmd_data.store_policy);
 	if (ret != EXIT_SUCCESS || !vdi_cmd_data.prealloc)
 		goto out;
@@ -567,8 +562,7 @@ static int vdi_snapshot(int argc, char **argv)
 		goto out;
 
 	ret = do_vdi_create(vdiname, inode->vdi_size, vid, &new_vid, true,
-			    inode->nr_copies, inode->copy_policy,
-			    inode->store_policy);
+			    inode->copy_policy, inode->store_policy);
 
 	if (ret == EXIT_SUCCESS && verbose) {
 		if (raw_output)
@@ -618,8 +612,7 @@ static int vdi_clone(int argc, char **argv)
 		base_vid = 0;
 
 	ret = do_vdi_create(dst_vdi, inode->vdi_size, base_vid, &new_vid, false,
-			    inode->nr_copies, inode->copy_policy,
-			    inode->store_policy);
+			    inode->copy_policy, inode->store_policy);
 	if (ret != EXIT_SUCCESS ||
 			(!vdi_cmd_data.prealloc && !vdi_cmd_data.no_share))
 		goto out;
@@ -876,7 +869,7 @@ static int vdi_rollback(int argc, char **argv)
 	}
 
 	ret = do_vdi_create(vdiname, inode->vdi_size, base_vid, &new_vid,
-			     false, inode->nr_copies, inode->copy_policy,
+			     false, inode->copy_policy,
 			     inode->store_policy);
 
 	if (ret == EXIT_SUCCESS && verbose) {
@@ -2235,7 +2228,7 @@ static uint32_t do_restore(const char *vdiname, int snapid, const char *tag)
 		goto out;
 
 	ret = do_vdi_create(vdiname, inode->vdi_size, inode->vdi_id, &vid,
-			    false, inode->nr_copies, inode->copy_policy,
+			    false, inode->copy_policy,
 			    inode->store_policy);
 	if (ret != EXIT_SUCCESS) {
 		sd_err("Failed to read VDI");
@@ -2343,7 +2336,7 @@ out:
 		/* recreate the current vdi object */
 		recovery_ret = do_vdi_create(vdiname, current_inode->vdi_size,
 					     current_inode->parent_vdi_id, NULL,
-					     true, current_inode->nr_copies,
+					     true,
 					     current_inode->copy_policy,
 					     current_inode->store_policy);
 		if (recovery_ret != EXIT_SUCCESS) {
@@ -2624,7 +2617,7 @@ static struct subcommand vdi_cmd[] = {
 	{"check", "<vdiname>", "seaphT", "check and repair image's consistency",
 	 NULL, CMD_NEED_NODELIST|CMD_NEED_ARG,
 	 vdi_check, vdi_options},
-	{"create", "<vdiname> <size>", "PycaphrvT", "create an image",
+	{"create", "<vdiname> <size>", "PyaphrvT", "create an image",
 	 NULL, CMD_NEED_NODELIST|CMD_NEED_ARG,
 	 vdi_create, vdi_options},
 	{"snapshot", "<vdiname>", "saphrvT", "create a snapshot",
@@ -2727,20 +2720,6 @@ static int vdi_parser(int ch, const char *opt)
 		break;
 	case 'w':
 		vdi_cmd_data.writeback = true;
-		break;
-	case 'c':
-		vdi_cmd_data.nr_copies = parse_copy(opt,
-						    &vdi_cmd_data.copy_policy);
-		if (!vdi_cmd_data.nr_copies) {
-			sd_err("Invalid parameter %s\n"
-			       "To create replicated vdi, set -c x\n"
-			       "  x(1 to %d)   - number of replicated copies\n"
-			       "To create erasure coded vdi, set -c x:y\n"
-			       "  x(2,4,8,16)  - number of data strips\n"
-			       "  y(1 to 15)   - number of parity strips",
-			       opt, SD_MAX_COPIES);
-			exit(EXIT_FAILURE);
-		}
 		break;
 	case 'F':
 		vdi_cmd_data.from_snapshot_id = strtol(opt, &p, 10);
