@@ -738,21 +738,6 @@ static int cluster_alter_cluster_copy(const struct sd_req *req,
 	return set_cluster_config(&sys->cinfo);
 }
 
-static int cluster_alter_vdi_copy(const struct sd_req *req, struct sd_rsp *rsp,
-				  void *data, const struct sd_node *sender)
-{
-	struct vnode_info *vinfo;
-
-	if (req->cluster.copy_policy != 0)
-		return SD_RES_INVALID_PARMS;
-
-	vinfo = get_vnode_info();
-	start_recovery(vinfo, vinfo, false);
-	put_vnode_info(vinfo);
-
-	return SD_RES_SUCCESS;
-}
-
 static bool node_size_varied(void)
 {
 	uint64_t new, used, old = sys->this_node.space;
@@ -1480,13 +1465,6 @@ static struct sd_op_template sd_ops[] = {
 		.type = SD_OP_TYPE_CLUSTER,
 		.is_admin_op = true,
 		.process_main = cluster_alter_cluster_copy,
-	},
-
-	[SD_OP_ALTER_VDI_COPY] = {
-		.name = "ALTER_VDI_COPY",
-		.type = SD_OP_TYPE_CLUSTER,
-		.is_admin_op = true,
-		.process_main = cluster_alter_vdi_copy,
 	},
 
 	/* local operations */
