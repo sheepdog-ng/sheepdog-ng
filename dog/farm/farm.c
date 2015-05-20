@@ -38,7 +38,6 @@ struct active_vdi_entry {
 	uint8_t  nr_copies;
 	uint8_t copy_policy;
 	uint8_t store_policy;
-	uint8_t block_size_shift;
 };
 
 struct registered_obj_entry {
@@ -78,7 +77,6 @@ static void update_active_vdi_entry(struct active_vdi_entry *vdi,
 	vdi->nr_copies = new->nr_copies;
 	vdi->copy_policy = new->copy_policy;
 	vdi->store_policy = new->store_policy;
-	vdi->block_size_shift = new->block_size_shift;
 }
 
 static void add_active_vdi(struct sd_inode *new)
@@ -133,8 +131,7 @@ static int create_active_vdis(void)
 				  vdi->vdi_id, &new_vid,
 				  false, vdi->nr_copies,
 				  vdi->copy_policy,
-				  vdi->store_policy,
-				  vdi->block_size_shift) < 0)
+				  vdi->store_policy) < 0)
 			return -1;
 	}
 	return 0;
@@ -205,7 +202,7 @@ out:
 }
 
 static int notify_vdi_add(uint32_t vdi_id, uint8_t nr_copies,
-			  uint8_t copy_policy, uint8_t block_size_shift)
+			  uint8_t copy_policy)
 {
 	int ret;
 	struct sd_req hdr;
@@ -216,14 +213,13 @@ static int notify_vdi_add(uint32_t vdi_id, uint8_t nr_copies,
 	hdr.vdi_state.new_vid = vdi_id;
 	hdr.vdi_state.copies = nr_copies;
 	hdr.vdi_state.copy_policy = copy_policy;
-	hdr.vdi_state.block_size_shift = block_size_shift;
 	hdr.vdi_state.set_bitmap = true;
 
 	ret = dog_exec_req(&sd_nid, &hdr, buf);
 
 	if (ret < 0)
-		sd_err("Fail to notify vdi add event(%"PRIx32", %d"
-		       ", %"PRIu8")", vdi_id, nr_copies, block_size_shift);
+		sd_err("Fail to notify vdi add event(%"PRIx32", %d)", vdi_id,
+		       nr_copies);
 	if (rsp->result != SD_RES_SUCCESS) {
 		sd_err("%s", sd_strerror(rsp->result));
 		ret = -1;
@@ -265,8 +261,7 @@ static void do_save_object(struct work *work)
 
 	sw = container_of(work, struct snapshot_work, work);
 
-	size = get_objsize(sw->entry.oid,
-			  (UINT32_C(1) <<  sw->entry.block_size_shift));
+	size = get_objsize(sw->entry.oid);
 	buf = xmalloc(size);
 
 	if (dog_read_object(sw->entry.oid, buf, size, 0, true) < 0)
@@ -305,7 +300,7 @@ out:
 
 static int queue_save_snapshot_work(uint64_t oid, uint32_t nr_copies,
 				    uint8_t copy_policy,
-				    uint8_t block_size_shift, void *data)
+				    void *data)
 {
 	struct snapshot_work *sw = xzalloc(sizeof(struct snapshot_work));
 	struct strbuf *trunk_buf = data;
@@ -313,7 +308,6 @@ static int queue_save_snapshot_work(uint64_t oid, uint32_t nr_copies,
 	sw->entry.oid = oid;
 	sw->entry.nr_copies = nr_copies;
 	sw->entry.copy_policy = copy_policy;
-	sw->entry.block_size_shift = block_size_shift;
 	sw->trunk_buf = trunk_buf;
 	sw->work.fn = do_save_object;
 	sw->work.done = save_object_done;
@@ -359,7 +353,6 @@ int farm_save_snapshot(const char *tag, bool multithread)
 		log_hdr.version = FARM_VERSION;
 		log_hdr.copy_number = cinfo.nr_copies;
 		log_hdr.copy_policy = cinfo.copy_policy;
-		log_hdr.block_size_shift = cinfo.block_size_shift;
 		snap_log_write_hdr(&log_hdr);
 	}
 
@@ -418,8 +411,7 @@ static void do_load_object(struct work *work)
 	vid = oid_to_vid(sw->entry.oid);
 	if (register_vdi(vid)) {
 		if (notify_vdi_add(vid, sw->entry.nr_copies,
-				   sw->entry.copy_policy,
-				   sw->entry.block_size_shift) < 0)
+				   sw->entry.copy_policy) < 0)
 			goto error;
 	}
 

@@ -475,7 +475,7 @@ static inline bool is_data_obj(uint64_t oid)
 		!is_ledger_object(oid);
 }
 
-static inline size_t get_objsize(uint64_t oid, uint32_t object_size)
+static inline size_t get_objsize(uint64_t oid)
 {
 	if (is_vdi_obj(oid))
 		return SD_INODE_SIZE;
@@ -489,7 +489,7 @@ static inline size_t get_objsize(uint64_t oid, uint32_t object_size)
 	if (is_ledger_object(oid))
 		return SD_LEDGER_OBJ_SIZE;
 
-	return object_size;
+	return SD_DATA_OBJ_SIZE;
 }
 
 static inline uint64_t data_oid_to_idx(uint64_t oid)

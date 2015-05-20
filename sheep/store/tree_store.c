@@ -99,8 +99,7 @@ static int tree_trim(int fd, uint64_t oid, const struct siocb *iocb,
 
 	if (*poffset + *plen < iocb->offset + iocb->length) {
 		uint64_t end = iocb->offset + iocb->length;
-		uint32_t object_size = get_vdi_object_size(oid_to_vid(oid));
-		if (end == get_objsize(oid, object_size))
+		if (end == get_objsize(oid))
 			/* This is necessary to punch the last block */
 			end = round_up(end, BLOCK_SIZE);
 		sd_debug("discard between %ld, %ld, %" PRIx64, *poffset + *plen,
@@ -362,7 +361,6 @@ int tree_create_and_write(uint64_t oid, const struct siocb *iocb)
 	int flags = prepare_iocb(oid, iocb, true);
 	int ret, fd;
 	uint32_t len = iocb->length;
-	uint32_t object_size = 0;
 	size_t obj_size;
 	uint64_t offset = iocb->offset;
 
@@ -402,9 +400,7 @@ int tree_create_and_write(uint64_t oid, const struct siocb *iocb)
 
 	trim_zero_blocks(iocb->buf, &offset, &len);
 
-	object_size = get_vdi_object_size(oid_to_vid(oid));
-
-	if (offset != 0 || len != get_objsize(oid, object_size)) {
+	if (offset != 0 || len != get_objsize(oid)) {
 		if (is_sparse_object(oid))
 			ret = xftruncate(fd, obj_size);
 		else

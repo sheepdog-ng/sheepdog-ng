@@ -488,6 +488,7 @@ static int get_vdi_bitmap_from(struct sd_node *node)
 
         for (i = 0; i < ARRAY_SIZE(sys->vdi_inuse); i++)
                 sys->vdi_inuse[i] |= tmp_vdi_inuse[i];
+
 	return ret;
 }
 

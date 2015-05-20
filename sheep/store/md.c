@@ -148,9 +148,9 @@ size_t get_store_objsize(uint64_t oid)
 		uint8_t policy = get_vdi_copy_policy(oid_to_vid(oid));
 		int d;
 		ec_policy_to_dp(policy, &d, NULL);
-		return get_vdi_object_size(oid_to_vid(oid)) / d;
+		return SD_DATA_OBJ_SIZE / d;
 	}
-	return get_objsize(oid, get_vdi_object_size(oid_to_vid(oid)));
+	return get_objsize(oid);
 }
 
 static int get_total_object_size(uint64_t oid, const char *wd, uint32_t epoch,

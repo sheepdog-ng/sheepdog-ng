@@ -18,7 +18,6 @@ struct object_tree_entry {
 	uint64_t oid;
 	uint8_t nr_copies;
 	uint8_t copy_policy;
-	uint8_t block_size_shift;
 	struct rb_node node;
 };
 
@@ -46,7 +45,7 @@ static struct object_tree_entry *do_insert(struct rb_root *root,
 }
 
 void object_tree_insert(uint64_t oid, uint32_t nr_copies,
-			uint8_t copy_policy, uint8_t block_size_shift)
+			uint8_t copy_policy)
 {
 	struct rb_root *root = &tree.root;
 	struct object_tree_entry *p = NULL;
@@ -56,7 +55,6 @@ void object_tree_insert(uint64_t oid, uint32_t nr_copies,
 	cached_entry->oid = oid;
 	cached_entry->nr_copies = nr_copies;
 	cached_entry->copy_policy = copy_policy;
-	cached_entry->block_size_shift = block_size_shift;
 
 	rb_init_node(&cached_entry->node);
 	p = do_insert(root, cached_entry);
@@ -88,7 +86,7 @@ int object_tree_size(void)
 
 int for_each_object_in_tree(int (*func)(uint64_t oid, uint32_t nr_copies,
 					uint8_t copy_policy,
-					uint8_t block_size_shift, void *data),
+					void *data),
 			    void *data)
 {
 	struct object_tree_entry *entry;
@@ -96,7 +94,7 @@ int for_each_object_in_tree(int (*func)(uint64_t oid, uint32_t nr_copies,
 
 	rb_for_each_entry(entry, &tree.root, node) {
 		if (func(entry->oid, entry->nr_copies, entry->copy_policy,
-			 entry->block_size_shift, data) < 0)
+			 data) < 0)
 			goto out;
 	}
 	ret = 0;

@@ -105,16 +105,6 @@ int get_vdi_copy_policy(uint32_t vid)
 	return sys->cinfo.copy_policy;
 }
 
-uint32_t get_vdi_object_size(uint32_t vid)
-{
-	return UINT32_C(1) << get_vdi_block_size_shift(vid);
-}
-
-uint8_t get_vdi_block_size_shift(uint32_t vid)
-{
-	return sys->cinfo.block_size_shift;
-}
-
 int get_obj_copy_number(uint64_t oid, int nr_zones)
 {
 	return min(get_vdi_copy_number(oid_to_vid(oid)), nr_zones);
@@ -190,7 +180,6 @@ static struct sd_inode *alloc_inode(const struct vdi_iocb *iocb,
 				    struct generation_reference *gref)
 {
 	struct sd_inode *new = xzalloc(sizeof(*new));
-	unsigned long block_size = (UINT32_C(1) << iocb->block_size_shift);
 
 	pstrcpy(new->name, sizeof(new->name), iocb->name);
 	new->vdi_id = new_vid;
@@ -199,7 +188,7 @@ static struct sd_inode *alloc_inode(const struct vdi_iocb *iocb,
 	new->copy_policy = iocb->copy_policy;
 	new->store_policy = iocb->store_policy;
 	new->nr_copies = iocb->nr_copies;
-	new->block_size_shift = find_next_bit(&block_size, BITS_PER_LONG, 0);
+	new->block_size_shift = sys->cinfo.block_size_shift;
 	new->snap_id = new_snapid;
 	new->parent_vdi_id = iocb->base_vid;
 	if (data_vdi_id)
@@ -232,10 +221,9 @@ static int create_vdi(const struct vdi_iocb *iocb, uint32_t new_snapid,
 	int ret;
 
 	sd_debug("%s: size %" PRIu64 ", new_vid %" PRIx32 ", copies %d, "
-		 "snapid %" PRIu32 " copy policy %"PRIu8 "store policy %"PRIu8
-		 "block_size_shift %"PRIu8, iocb->name, iocb->size, new_vid,
-		  iocb->nr_copies, new_snapid, new->copy_policy,
-		  new->store_policy, iocb->block_size_shift);
+		 "snapid %" PRIu32 " copy policy %"PRIu8 "store policy %"PRIu8,
+		 iocb->name, iocb->size, new_vid, iocb->nr_copies, new_snapid,
+		 new->copy_policy, new->store_policy);
 
 	ret = sd_write_object(vid_to_vdi_oid(new_vid), (char *)new,
 			      sizeof(*new), 0, true);
@@ -270,9 +258,8 @@ static int clone_vdi(const struct vdi_iocb *iocb, uint32_t new_snapid,
 	int ret;
 
 	sd_debug("%s: size %" PRIu64 ", vid %" PRIx32 ", base %" PRIx32 ", "
-		 "copies %d, block_size_shift %" PRIu8 ", snapid %" PRIu32,
-		 iocb->name, iocb->size, new_vid, base_vid,
-		 iocb->nr_copies, iocb->block_size_shift, new_snapid);
+		 "copies %d, snapid %" PRIu32, iocb->name, iocb->size, new_vid,
+		 base_vid, iocb->nr_copies, new_snapid);
 
 	ret = sd_read_object(vid_to_vdi_oid(base_vid), (char *)base,
 			     sizeof(*base), 0);
@@ -333,9 +320,8 @@ static int snapshot_vdi(const struct vdi_iocb *iocb, uint32_t new_snapid,
 	int ret;
 
 	sd_debug("%s: size %" PRIu64 ", vid %" PRIx32 ", base %" PRIx32 ", "
-		 "copies %d, block_size_shift %"PRIu8 ", snapid %" PRIu32,
-		 iocb->name, iocb->size, new_vid, base_vid,
-		 iocb->nr_copies, iocb->block_size_shift, new_snapid);
+		 "copies %d, snapid %" PRIu32, iocb->name, iocb->size, new_vid,
+		 base_vid, iocb->nr_copies, new_snapid);
 
 	ret = sd_read_object(vid_to_vdi_oid(base_vid), (char *)base,
 			     sizeof(*base), 0);
@@ -403,9 +389,8 @@ static int rebase_vdi(const struct vdi_iocb *iocb, uint32_t new_snapid,
 	int ret;
 
 	sd_debug("%s: size %" PRIu64 ", vid %" PRIx32 ", base %" PRIx32 ", "
-		 "cur %" PRIx32 ", copies %d, block_size_shift %"PRIu8
-		 ", snapid %" PRIu32, iocb->name, iocb->size, new_vid,
-		 base_vid, cur_vid, iocb->nr_copies, iocb->block_size_shift,
+		 "cur %" PRIx32 ", copies %d, snapid %" PRIu32, iocb->name,
+		 iocb->size, new_vid, base_vid, cur_vid, iocb->nr_copies,
 		 new_snapid);
 
 	ret = sd_read_object(vid_to_vdi_oid(base_vid), (char *)base,
@@ -1052,15 +1037,6 @@ int sd_create_hyper_volume(const char *name, uint32_t *vdi_id)
 	hdr.vdi.copies = sys->cinfo.nr_copies;
 	hdr.vdi.copy_policy = sys->cinfo.copy_policy;
 	hdr.vdi.store_policy = 1;
-	/* XXX Cannot use both features, Hypervolume and Change object size */
-	if (sys->cinfo.block_size_shift != SD_DEFAULT_BLOCK_SIZE_SHIFT) {
-		hdr.vdi.block_size_shift = SD_DEFAULT_BLOCK_SIZE_SHIFT;
-		sd_warn("Cluster default object size is not"
-			" SD_DATA_OBJ_SIZE(%d)."
-			"Set VDI object size %d and create HyperVolume",
-			SD_DEFAULT_BLOCK_SIZE_SHIFT,
-			SD_DEFAULT_BLOCK_SIZE_SHIFT);
-	}
 
 	ret = exec_local_req(&hdr, buf);
 	if (ret != SD_RES_SUCCESS) {

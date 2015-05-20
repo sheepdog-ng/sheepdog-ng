@@ -93,7 +93,6 @@ static int cluster_new_vdi(struct request *req)
 		.copy_policy = hdr->vdi.copy_policy,
 		.store_policy = hdr->vdi.store_policy,
 		.nr_copies = hdr->vdi.copies,
-		.block_size_shift = hdr->vdi.block_size_shift,
 		.time = (uint64_t) tv.tv_sec << 32 | tv.tv_usec * 1000,
 	};
 
@@ -106,9 +105,6 @@ static int cluster_new_vdi(struct request *req)
 	if (iocb.copy_policy)
 		iocb.nr_copies = ec_policy_to_dp(iocb.copy_policy, NULL, NULL);
 
-	if (!hdr->vdi.block_size_shift)
-		iocb.block_size_shift = sys->cinfo.block_size_shift;
-
 	if (hdr->data_length != SD_MAX_VDI_LEN)
 		return SD_RES_INVALID_PARMS;
 
@@ -119,7 +115,6 @@ static int cluster_new_vdi(struct request *req)
 
 	rsp->vdi.vdi_id = vid;
 	rsp->vdi.copies = iocb.nr_copies;
-	rsp->vdi.block_size_shift = iocb.block_size_shift;
 
 	return ret;
 }
@@ -239,7 +234,6 @@ static int cluster_get_vdi_info(struct request *req)
 
 	rsp->vdi.vdi_id = info.vid;
 	rsp->vdi.copies = get_vdi_copy_number(info.vid);
-	rsp->vdi.block_size_shift = get_vdi_block_size_shift(info.vid);
 
 	return ret;
 }

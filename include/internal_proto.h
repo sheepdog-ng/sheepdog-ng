@@ -354,13 +354,4 @@ enum shared_lock_state {
 	SHARED_LOCK_STATE_INVALIDATED,
 };
 
-struct vdi_state {
-	uint32_t vid;
-	uint8_t nr_copies;
-	uint8_t snapshot;
-	uint8_t copy_policy;
-	uint8_t block_size_shift;
-	uint8_t __pad[3];
-};
-
 #endif /* __INTERNAL_PROTO_H__ */
