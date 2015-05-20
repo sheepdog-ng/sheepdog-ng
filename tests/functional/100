@@ -4,6 +4,8 @@
 
 . ./common
 
+_notrun "-R is removed"
+
 for i in 0 1 2 3; do
     _start_sheep $i
 done

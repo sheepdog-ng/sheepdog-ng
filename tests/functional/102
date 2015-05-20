@@ -30,12 +30,12 @@ $DOG vdi delete test2
 
 _node_info
 
-echo "yes" | $DOG cluster format -b tree
+echo "yes" | $DOG cluster format -b tree -c 4:2
 
 echo "CHECK erasure object"
 echo "create inode/data erasure code objects"
 
-$DOG vdi create -c 4:2 test 16M
+$DOG vdi create test 16M
 _random | $DOG vdi write test 0 512
 $DOG vdi list | _filter_short_date
 

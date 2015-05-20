@@ -11,10 +11,10 @@ _wait_for_sheep 6
 TMPDIR="$STORE/tmp"
 rm -rf $TMPDIR
 
-_cluster_format -c 6
+_cluster_format -c 3
 
 _vdi_create test1 10M
-$DOG vdi create test2 -c 3 10M
+_vdi_create test2 10M
 
 _random | $DOG vdi write test1
 _random | $DOG vdi write test2
@@ -42,7 +42,7 @@ for i in `seq 0 5`; do
 done
 _wait_for_sheep 6
 
-_cluster_format -c 6
+_cluster_format -c 3
 $DOG cluster snapshot load s1 $TMPDIR
 _vdi_list
 

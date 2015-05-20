@@ -4,6 +4,8 @@
 
 . ./common
 
+_notrun "journal considered to be removed"
+
 _start_sheep 0 "-j size=64M"
 
 _wait_for_sheep 1

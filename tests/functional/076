@@ -10,9 +10,9 @@ done
 
 _wait_for_sheep 46
 
-_cluster_format
+_cluster_format -c 16:15
 
-$DOG vdi create -c 16:15 test 40M
+$DOG vdi create test 40M
 _vdi_list
 _random | $DOG vdi write test
 $DOG vdi read test | md5sum > $STORE/csum1
@@ -30,9 +30,9 @@ done
 
 _wait_for_sheep 3
 
-_cluster_format
+_cluster_format -c 2:1
 
-$DOG vdi create -c 2:1 test 40M
+$DOG vdi create test 40M
 _vdi_list
 _random | $DOG vdi write test
 $DOG vdi read test | md5sum > $STORE/csum1

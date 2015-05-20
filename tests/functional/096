@@ -6,6 +6,8 @@ num=6
 
 . ./common
 
+_notrun "FIXME: remove vdi alter-copy and enable me"
+
 _log_and_exec()
 {
 	echo -e "\n\$ $1"

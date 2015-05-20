@@ -36,6 +36,6 @@ $DOG vdi list | _filter_short_date
 $DOG vdi delete test
 
 # invalid store name
-echo "yes" | $DOG cluster format -c 3 -b dummy | _filter_spaces
+echo "yes" | $DOG cluster format -c 3 -b dummy | _filter_spaces | sort
 
 status=0

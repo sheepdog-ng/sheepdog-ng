@@ -4,6 +4,8 @@
 
 . ./common
 
+_notrun "Per volume redundancy is removed"
+
 for i in `seq 0 6`; do
     _start_sheep $i
 done

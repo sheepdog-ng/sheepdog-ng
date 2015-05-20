@@ -10,10 +10,8 @@ _wait_for_sheep 6
 _cluster_format -c 1
 
 for i in 1 2 3; do
-    $DOG vdi create test$i ${i}00M -c $i
+    $DOG vdi create test$i ${i}00M
 done
-
-$DOG vdi create -c 4:2 test4 400M
 
 _vdi_list
 
