@@ -347,7 +347,7 @@ int tree_read(uint64_t oid, const struct siocb *iocb)
 	 * the stale directory
 	 */
 	if (ret == SD_RES_NO_OBJ && iocb->epoch > 0 &&
-	    iocb->epoch < sys_epoch()) {
+	    iocb->epoch <= sys_epoch()) {
 		get_store_stale_path(oid, iocb->epoch, iocb->ec_index, path);
 		ret = tree_read_from_path(oid, path, iocb);
 	}
