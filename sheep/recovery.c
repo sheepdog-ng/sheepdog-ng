@@ -729,8 +729,13 @@ static inline bool run_next_rw(void)
 
 	free_recovery_info(cur);
 
-	if (!node_is_gateway_only())
-		sd_store->update_epoch(nrinfo->tgt_epoch);
+	if (!node_is_gateway_only()) {
+		int ret;
+		ret = sd_store->update_epoch(nrinfo->tgt_epoch);
+		if (ret != SD_RES_SUCCESS)
+			sd_err("failed to update epoch %"PRIu32 " %s",
+			       nrinfo->tgt_epoch, sd_strerror(ret));
+	}
 
 	main_thread_set(current_rinfo, nrinfo);
 	wakeup_all_requests();
@@ -1112,8 +1117,13 @@ int start_recovery(struct vnode_info *cur_vinfo, struct vnode_info *old_vinfo,
 	rinfo->cur_vinfo = grab_vnode_info(cur_vinfo);
 	rinfo->old_vinfo = grab_vnode_info(old_vinfo);
 
-	if (!node_is_gateway_only())
-		sd_store->update_epoch(rinfo->tgt_epoch);
+	if (!node_is_gateway_only()) {
+		int ret;
+		ret = sd_store->update_epoch(rinfo->tgt_epoch);
+		if (ret != SD_RES_SUCCESS)
+			sd_err("failed to update epoch %"PRIu32 " %s",
+			       rinfo->tgt_epoch, sd_strerror(ret));
+	}
 
 	if (main_thread_get(current_rinfo) != NULL) {
 		/* skip the previous epoch recovery */
