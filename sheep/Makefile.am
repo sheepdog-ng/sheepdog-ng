@@ -28,8 +28,7 @@ sheep_SOURCES		= sheep.c group.c request.c gateway.c vdi.c \
 			  ops.c recovery.c cluster/local.c \
 			  object_cache.c object_list_cache.c \
 			  store/common.c store/md.c \
-			  store/plain_store.c store/tree_store.c \
-			  config.c migrate.c
+			  store/plain_store.c config.c migrate.c
 
 if BUILD_HTTP
 sheep_SOURCES		+= http/http.c http/kv.c http/s3.c http/swift.c \

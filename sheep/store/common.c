@@ -82,11 +82,6 @@ int err_to_sderr(const char *path, uint64_t oid, int err)
 	}
 }
 
-bool store_id_match(enum store_id id)
-{
-	return (sd_store->id == id);
-}
-
 int update_epoch_log(uint32_t epoch, struct sd_node *nodes, size_t nr_nodes)
 {
 	int ret, len, nodes_len;
