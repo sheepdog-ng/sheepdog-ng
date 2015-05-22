@@ -770,13 +770,7 @@ static void delete_vdi_work(struct work *work)
 	struct sd_inode *inode = NULL;
 	uint32_t vdi_id = dw->target_vid;
 
-	inode = malloc(sizeof(*inode));
-	if (!inode) {
-		sd_err("failed to allocate memory");
-		dw->succeed = false;
-		return;
-	}
-
+	inode = xvalloc(sizeof(*inode));
 	ret = read_backend_object(vid_to_vdi_oid(vdi_id),
 				  (void *)inode, sizeof(*inode), 0);
 
