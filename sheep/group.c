@@ -1043,10 +1043,61 @@ main_fn void sd_update_node_handler(struct sd_node *node)
 	kick_node_recover();
 }
 
+main_fn  int fetch_cluster_node_list(void)
+{
+	int ret = 0;
+
+	struct sd_req hdr;
+	struct sd_rsp *rsp = (struct sd_rsp *)&hdr;
+	struct sd_node *buf = NULL;
+	unsigned int size;
+	struct sd_node *ent;
+	unsigned int nr_nodes;
+	int i = 0;
+
+	size = sizeof(*ent) * SD_MAX_NODES;
+	buf = xzalloc(size);
+	sd_init_req(&hdr, SD_OP_GET_NODE_LIST);
+	hdr.data_length = size;
+
+	ret = sheep_exec_req(&sys->transfer_node.nid, &hdr, (char *)buf);
+	if (rsp->result != SD_RES_SUCCESS) {
+		sd_err("Failed to fetch node list: %s",
+		       sd_strerror(rsp->result));
+		ret = -1;
+		goto out;
+	}
+
+	size = rsp->data_length;
+	nr_nodes = size / sizeof(*ent);
+	if (nr_nodes == 0) {
+		sd_err("There are no active sheep daemons");
+		exit(EXIT_FAILURE);
+	}
+
+	/* FIXME */
+	if (nr_nodes > SD_MAX_NODES) {
+		ret = -1;
+		goto out;
+	}
+
+	sys->cinfo.nr_nodes = nr_nodes;
+	memcpy(sys->cinfo.nodes, buf, size);
+
+	for(i = 0; i < sys->cinfo.nr_nodes; i++)
+		sd_debug("sheep ip: %s", node_id_to_str(&sys->cinfo.nodes[i].nid));
+out:
+	free(buf);
+	return ret;
+}
+
 int create_cluster(int port, int64_t zone, int nr_vnodes,
 		   bool explicit_addr)
 {
 	int nr_nodes = 0, ret;
+
+	if (sys->gateway_only)
+		return 0;
 
 	if (!sys->cdrv) {
 		sys->cdrv = find_cdrv(DEFAULT_CLUSTER_DRIVER);

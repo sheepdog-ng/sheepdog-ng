@@ -117,7 +117,7 @@ static struct sd_option sheep_options[] = {
 	 cluster_help},
 	{'D', "directio", false, "use direct IO for backend store"},
 	{'f', "foreground", false, "make the program run in foreground"},
-	{'g', "gateway", false, "make the program run as a gateway mode"},
+	{'g', "gateway", true, "make the program run as a gateway mode"},
 	{'h', "help", false, "display this help and exit"},
 	{'i', "ioaddr", true, "use separate network card to handle IO requests"
 	 " (default: disabled)", ioaddr_help},
@@ -378,9 +378,29 @@ static int ionic_port_parser(const char *s)
 	return 0;
 }
 
+static const char *sd_addr, *sd_pt;
+static int sdnic_host_parser(const char *s)
+{
+	sd_addr = s;
+	return 0;
+}
+
+static int sdnic_port_parser(const char *s)
+{
+	sd_pt = s;
+	return 0;
+}
+
+
 static struct option_parser ionic_parsers[] = {
 	{ "host=", ionic_host_parser },
 	{ "port=", ionic_port_parser },
+	{ NULL, NULL },
+};
+
+static struct option_parser sdnic_parsers[] = {
+	{ "host=", sdnic_host_parser },
+	{ "port=", sdnic_port_parser },
 	{ NULL, NULL },
 };
 
@@ -403,6 +423,16 @@ static int create_work_queues(void)
 
 	if (init_work_queue(get_nr_nodes))
 		return -1;
+
+	if (sys->gateway_only) {
+		sys->net_wqueue = create_work_queue("net", WQ_UNLIMITED);
+		sys->gateway_wqueue = create_work_queue("gway", WQ_UNLIMITED);
+
+		if(!sys->net_wqueue || !sys->gateway_wqueue)
+			return -1;
+
+		return 0;
+	}
 
 	sys->net_wqueue = create_work_queue("net", WQ_UNLIMITED);
 	sys->gateway_wqueue = create_work_queue("gway", WQ_UNLIMITED);
@@ -579,7 +609,7 @@ static void sighup_handler(int signo, siginfo_t *info, void *context)
 
 int main(int argc, char **argv)
 {
-	int ch, longindex, ret, port = SD_LISTEN_PORT, io_port = SD_LISTEN_PORT;
+	int ch, longindex, ret, port = SD_LISTEN_PORT, io_port = SD_LISTEN_PORT, sd_port = SD_LISTEN_PORT;
 	int nr_vnodes = SD_DEFAULT_VNODES, rc = 1;
 	const char *dirp = DEFAULT_OBJECT_DIR, *short_options;
 	char *dir, *p, *pid_file = NULL, *bindaddr = NULL, log_path[PATH_MAX],
@@ -642,6 +672,21 @@ int main(int argc, char **argv)
 		case 'g':
 			/* same as '-v 0' */
 			nr_vnodes = 0;
+			if (option_parse(optarg, ",", sdnic_parsers) < 0)
+				exit(1);
+
+			if (!str_to_addr(sd_addr, sys->transfer_node.nid.addr)) {
+				sd_err("Bad addr: '%s'", sd_addr);
+				exit(1);
+			}
+
+			if (sd_pt)
+				if (sscanf(sd_pt, "%u", &sd_port) != 1) {
+					sd_err("Bad port '%s'", sd_pt);
+					exit(1);
+				}
+			sys->transfer_node.nid.port= sd_port;
+			sys->this_node.nid.port = port;
 			break;
 		case 'z':
 			zone = strtol(optarg, &p, 10);
@@ -838,7 +883,10 @@ int main(int argc, char **argv)
 	if (ret)
 		goto cleanup_log;
 
-	ret = create_cluster(port, zone, nr_vnodes, explicit_addr);
+	if (sys->gateway_only)
+		ret = fetch_cluster_node_list();
+	else
+		ret = create_cluster(port, zone, nr_vnodes, explicit_addr);
 	if (ret) {
 		sd_err("failed to create sheepdog cluster");
 		goto cleanup_log;

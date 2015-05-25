@@ -130,6 +130,7 @@ struct system_info {
 	const char *cdrv_option;
 
 	struct sd_node this_node;
+	struct sd_node transfer_node;
 
 	struct cluster_info cinfo;
 
@@ -386,6 +387,8 @@ void wakeup_requests_on_oid(uint64_t oid);
 void wakeup_all_requests(void);
 void resume_suspended_recovery(void);
 
+int fetch_cluster_node_list(void);
+
 int create_cluster(int port, int64_t zone, int nr_vnodes,
 		   bool explicit_addr);
 int leave_cluster(void);
@@ -475,6 +478,9 @@ void do_process_work(struct work *work);
 int do_process_main(const struct sd_op_template *op, const struct sd_req *req,
 		    struct sd_rsp *rsp, void *data,
 		    const struct sd_node *sender);
+void do_gw_process_work(struct work *work);
+void gw_op_done(struct work *work);
+
 int gateway_to_peer_opcode(int opcode);
 
 extern uint32_t last_gathered_epoch;

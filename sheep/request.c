@@ -321,6 +321,88 @@ static bool has_enough_zones(struct request *req)
 	return req->vinfo->nr_zones >= get_vdi_copy_number(oid_to_vid(oid));
 }
 
+
+void do_gw_process_work(struct work *work)
+{
+	struct request *req = container_of(work, struct request, work);
+	struct sd_req hdr;
+	struct sd_rsp *rsp = (struct sd_rsp *)&hdr;
+	int ret = SD_RES_SUCCESS;
+	struct sockfd *sfd;
+	struct cluster_info *cinfo = &sys->cinfo;
+	const struct node_id *nid = NULL;
+	int start = random() % cinfo->nr_nodes, i, end = cinfo->nr_nodes;
+	bool retry = false;
+
+again:
+	for (i = start; i < end; i++) {
+		nid = &cinfo->nodes[i].nid;
+		sfd = sockfd_cache_get(nid);
+		if (!sfd) {
+			retry = true;
+			continue;
+		} else
+			goto do_request;
+	}
+
+	if (start != 0) {
+		end = start;
+		start = 0;
+		goto again;
+	}
+
+	if (i >= end) {
+		sd_err("network error");
+		req->rp.result = SD_RES_NETWORK_ERROR;
+		goto error;
+	}
+
+do_request:
+	sd_debug("opcode: %x, node: %s", req->rq.opcode,
+		node_to_str(cinfo->nodes + i));
+	if (retry)
+		fetch_cluster_node_list();
+
+	hdr = req->rq;
+	ret = sheep_exec_req(nid, &hdr, req->data);
+	if (ret != SD_RES_SUCCESS) {
+		sd_err("request gw request error");
+		req->rp.result = ret;
+		goto error;
+	}
+
+	memcpy(&req->rp, rsp, sizeof(*rsp));
+	return;
+
+error:
+	return;
+}
+
+void gw_op_done(struct work *work)
+{
+	struct request *req = container_of(work, struct request, work);
+
+	switch (req->rp.result) {
+	case SD_RES_SUCCESS:
+		break;
+	default:
+		sd_debug("gw opertion error %s", sd_strerror(req->rp.result));
+		break;
+	}
+
+	put_request(req);
+	return;
+}
+
+static void queue_gw_request(struct request *req)
+{
+
+	req->work.fn = do_gw_process_work;
+	req->work.done = gw_op_done;
+	queue_work(sys->gateway_wqueue, &req->work);
+	return;
+}
+
 static void queue_gateway_request(struct request *req)
 {
 	struct sd_req *hdr = &req->rq;
@@ -479,11 +561,17 @@ static void queue_request(struct request *req)
 		}
 	}
 
+
 	req->op = get_sd_op(hdr->opcode);
 	if (!req->op) {
 		sd_err("invalid opcode %d", hdr->opcode);
 		rsp->result = SD_RES_INVALID_PARMS;
 		goto done;
+	}
+
+	if (sys->gateway_only) {
+		queue_gw_request(req);
+		return;
 	}
 
 	sd_debug("%s, %d", op_name(req->op), sys->cinfo.status);
