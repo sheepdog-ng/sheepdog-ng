@@ -350,6 +350,7 @@ int vdi_create(const struct vdi_iocb *iocb, uint32_t *new_vid);
 int vdi_snapshot(const struct vdi_iocb *iocb, uint32_t *new_vid);
 int vdi_delete(const struct vdi_iocb *iocb, struct request *req);
 int vdi_lookup(const struct vdi_iocb *iocb, struct vdi_info *info);
+void vdi_mark_snapshot(uint32_t vid);
 void clean_vdi_state(void);
 int sd_delete_vdi(const char *name);
 int sd_lookup_vdi(const char *name, uint32_t *vid);

@@ -122,13 +122,13 @@ int get_req_copy_number(struct request *req)
 	return nr_copies;
 }
 
-static int add_vdi_state(uint32_t vid, bool snapshot)
+void vdi_mark_snapshot(uint32_t vid)
 {
 	struct vdi_state_entry *entry, *old;
 
 	entry = xzalloc(sizeof(*entry));
 	entry->vid = vid;
-	entry->snapshot = snapshot;
+	entry->snapshot = true;
 
 	sd_debug("%" PRIx32, vid);
 
@@ -137,12 +137,10 @@ static int add_vdi_state(uint32_t vid, bool snapshot)
 	if (old) {
 		free(entry);
 		entry = old;
-		entry->snapshot = snapshot;
+		entry->snapshot = true;
 	}
 
 	sd_rw_unlock(&vdi_state_lock);
-
-	return SD_RES_SUCCESS;
 }
 
 static inline bool vdi_is_deleted(struct sd_inode *inode)
@@ -669,32 +667,8 @@ int vdi_snapshot(const struct vdi_iocb *iocb, uint32_t *new_vid)
 		return ret;
 
 	if (iocb->base_vid == info.vid) {
-		ret = snapshot_vdi(iocb, info.snapid, *new_vid,
-				   iocb->base_vid);
-		if (ret != SD_RES_SUCCESS)
-			return ret;
-		/*
-		 * vdi state is a private state of this node that is never
-		 * synced up with other nodes, so make sure you know of it
-		 * before you implement any useful featurs that might need a
-		 * syncd up states.
-		 *
-		 * QEMU client's online snapshot logic:
-		 * qemu-img snapshot -> tell connected sheep to make working as
-		 *                      snapshot
-		 * sheep   --> make the working vdi as snapshot
-		 * QEMU VM --> get the SD_RES_READONLY while it is write to the
-		 *             working vdi.
-		 * QEMU VM --> reload new working vdi, switch to it.
-		 *
-		 * It only needs the connected sheep to return SD_RES_READONLY,
-		 * so we can add a private state to the connected sheep and no
-		 * need to sync it with other nodes. If other node want to know
-		 * whether some vdi is snapshot or not, just read the inode
-		 * directly.
-		 */
-		add_vdi_state(iocb->base_vid, true);
-		return ret;
+		return snapshot_vdi(iocb, info.snapid, *new_vid,
+				    iocb->base_vid);
 	} else
 		return rebase_vdi(iocb, info.snapid, *new_vid, iocb->base_vid,
 				  info.vid);

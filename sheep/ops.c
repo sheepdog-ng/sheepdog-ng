@@ -125,12 +125,34 @@ static int post_cluster_new_vdi(const struct sd_req *req, struct sd_rsp *rsp,
 	unsigned long nr = rsp->vdi.vdi_id;
 	int ret = rsp->result;
 
-	sd_info("req->vdi.base_vdi_id: %x, rsp->vdi.vdi_id: %x",
+	sd_info("base_vdi_id: %x, new vdi_id: %x",
 		req->vdi.base_vdi_id, rsp->vdi.vdi_id);
 
 	sd_debug("done %d %lx", ret, nr);
-	if (ret == SD_RES_SUCCESS)
+	if (ret == SD_RES_SUCCESS) {
+		/*
+		 * vdi state is a private state of this node that is never
+		 * synced up with other nodes, so make sure you know of it
+		 * before you implement any useful featurs that might need a
+		 * syncd up states.
+		 *
+		 * QEMU client's online snapshot logic:
+		 * qemu-img(or dog) snapshot -> tell connected sheep to make
+		 *                              working as snapshot
+		 * sheep   --> make the working vdi as snapshot
+		 * QEMU VM --> get the SD_RES_READONLY while it is write to the
+		 *             working vdi.
+		 * QEMU VM --> reload new working vdi, switch to it.
+		 *
+		 * It only needs the connected sheep to return SD_RES_READONLY,
+		 * so we can add a private state to the connected sheep and
+		 * propagate it to other nodes via cluster notification. But
+		 * note newly joining nodes won't share this state in order to
+		 * avoid vdi states sync-up.
+		 */
+		vdi_mark_snapshot(req->vdi.base_vdi_id);
 		atomic_set_bit(nr, sys->vdi_inuse);
+	}
 
 	return ret;
 }
