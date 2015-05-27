@@ -400,17 +400,24 @@ static int init_vdi_info(const char *entry, uint32_t *vid, size_t *size)
 	void *inode_buf = NULL;
 	struct vdi_inode *inode = NULL, *dummy;
 	char command[COMMAND_LEN];
+	uint32_t snapid;
+	char *data;
 
 	snprintf(command, sizeof(command), "dog vdi list -r %s -a %s -p %d",
 		 entry, sdhost, sdport);
 	buf = sheepfs_run_cmd(command);
 	if (!buf)
 		return -1;
-	if (sscanf(buf->buf, "%*s %*s %*d %zu %*s %*s %*s %"PRIx32,
-	    size, vid) < 2) {
-		sheepfs_pr("failed to sscanf %s\n", entry);
-		goto err;
-	}
+	data = buf->buf;
+	do {
+		if (sscanf(data, "%*s %*s %d %zu %*s %*s %*s %"PRIx32,
+			   &snapid, size, vid) < 3) {
+			sheepfs_pr("failed to sscanf %s\n", entry);
+			goto err;
+		}
+		data = strstr(data, "\n");
+		data++; /* eat the "\n" */
+	} while (snapid != 0);
 
 	inode_buf = malloc(SD_INODE_SIZE);
 	if (!inode_buf) {
