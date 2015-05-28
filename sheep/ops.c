@@ -172,17 +172,25 @@ static int vdi_init_tag(const char **tag, const char *buf, uint32_t len)
 static int cluster_del_vdi(struct request *req)
 {
 	const struct sd_req *hdr = &req->rq;
+	struct sd_rsp *rsp = &req->rp;
 	uint32_t data_len = hdr->data_length;
 	struct vdi_iocb iocb = {
 		.name = req->data,
 		.data_len = data_len,
 		.snapid = hdr->vdi.snapid,
 	};
+	struct vdi_info info = {};
+	int ret;
 
 	if (vdi_init_tag(&iocb.tag, req->data, data_len) < 0)
 		return SD_RES_INVALID_PARMS;
 
-	return vdi_delete(&iocb, req);
+	ret = vdi_lookup(&iocb, &info);
+	if (ret != SD_RES_SUCCESS)
+		return ret;
+	rsp->vdi.vdi_id = info.vid;
+
+	return vdi_delete(info.vid);
 }
 
 struct cache_deletion_work {
@@ -212,6 +220,8 @@ static int post_cluster_del_vdi(const struct sd_req *req, struct sd_rsp *rsp,
 	unsigned long vid = rsp->vdi.vdi_id;
 	struct cache_deletion_work *dw;
 	int ret = rsp->result;
+
+	vdi_delete_state(vid);
 
 	if (!sys->enable_object_cache)
 		return ret;

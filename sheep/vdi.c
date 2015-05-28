@@ -143,6 +143,18 @@ void vdi_mark_snapshot(uint32_t vid)
 	sd_rw_unlock(&vdi_state_lock);
 }
 
+void vdi_delete_state(uint32_t vid)
+{
+	struct vdi_state_entry *entry;
+
+	sd_debug("%"PRIx32, vid);
+	sd_read_lock(&vdi_state_lock);
+	entry = vdi_state_search(&vdi_state_root, vid);
+	if (entry)
+		rb_erase(&entry->node, &vdi_state_root);
+	sd_rw_unlock(&vdi_state_lock);
+}
+
 static inline bool vdi_is_deleted(struct sd_inode *inode)
 {
 	return *inode->name == '\0';
@@ -807,7 +819,7 @@ static void delete_vdi_done(struct work *work)
 	free(dw);
 }
 
-static int start_deletion(struct request *req, uint32_t vid)
+int vdi_delete(uint32_t vid)
 {
 	struct deletion_work *dw = NULL;
 	int ret = SD_RES_SUCCESS, finish_fd;
@@ -837,20 +849,6 @@ static int start_deletion(struct request *req, uint32_t vid)
 out:
 	free(dw);
 
-	return ret;
-}
-
-int vdi_delete(const struct vdi_iocb *iocb, struct request *req)
-{
-	struct vdi_info info;
-	int ret;
-
-	ret = vdi_lookup(iocb, &info);
-	if (ret != SD_RES_SUCCESS)
-		goto out;
-
-	ret = start_deletion(req, info.vid);
-out:
 	return ret;
 }
 
