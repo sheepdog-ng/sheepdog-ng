@@ -58,14 +58,6 @@ if BUILD_TRACE
 AM_CPPFLAGS		+= -DENABLE_TRACE
 endif
 
-# for LTTng ust tracepoints
-AM_CPPFLAGS		+= -I$(top_srcdir)/lib/tracepoint
-noinst_HEADERS		=  tracepoint/work_tp.h tracepoint/sockfd_cache_tp.h tracepoint/event_tp.h
-
-if BUILD_LTTNG_UST
-libsd_a_SOURCES		+= tracepoint/work_tp.c tracepoint/sockfd_cache_tp.c tracepoint/event_tp.c
-endif
-
 # support for GNU Flymake
 check-syntax:
 	$(COMPILE) -fsyntax-only $(CHK_SOURCES)

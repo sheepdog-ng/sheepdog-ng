@@ -34,9 +34,6 @@
 #include "work.h"
 #include "event.h"
 
-#define TRACEPOINT_DEFINE
-#include "work_tp.h"
-
 /*
  * The protection period from shrinking work queue.  This is necessary
  * to avoid many calls of pthread_create.  Without it, threads are
@@ -267,8 +264,6 @@ void queue_work(struct work_queue *q, struct work *work)
 {
 	struct wq_info *wi = container_of(q, struct wq_info, q);
 
-	tracepoint(work, queue_work, wi, work);
-
 	uatomic_inc(&wi->nr_queued_work);
 	sd_mutex_lock(&wi->pending_lock);
 
@@ -301,8 +296,6 @@ static void worker_thread_request_done(int fd, int events, void *data)
 		while (!list_empty(&list)) {
 			work = list_first_entry(&list, struct work, w_list);
 			list_del(&work->w_list);
-
-			tracepoint(work, request_done, wi, work);
 
 			work->done(work);
 			uatomic_dec(&wi->nr_queued_work);
@@ -343,8 +336,6 @@ retest:
 
 		list_del(&work->w_list);
 		sd_mutex_unlock(&wi->pending_lock);
-
-		tracepoint(work, do_work, wi, work);
 
 		if (work->fn)
 			work->fn(work);
@@ -419,7 +410,6 @@ struct work_queue *create_work_queue(const char *name,
 
 	list_add(&wi->list, &wq_info_list);
 
-	tracepoint(work, create_queue, wi->name, wi, tc);
 	return &wi->q;
 destroy_threads:
 	sd_destroy_cond(&wi->pending_cond);

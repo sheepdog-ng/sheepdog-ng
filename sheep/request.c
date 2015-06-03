@@ -13,9 +13,6 @@
 
 #include "sheep_priv.h"
 
-#define TRACEPOINT_DEFINE
-#include "request_tp.h"
-
 static void del_requeue_request(struct request *req)
 {
 	list_del(&req->request_list);
@@ -801,8 +798,6 @@ static void rx_work(struct work *work)
 			conn->dead = true;
 		}
 	}
-
-	tracepoint(request, rx_work, conn->fd, work, req, hdr.opcode);
 }
 
 static void rx_main(struct work *work)
@@ -840,8 +835,6 @@ static void rx_main(struct work *work)
 			 ci->conn.ipstr,
 			 ci->conn.port);
 	}
-
-	tracepoint(request, rx_main, ci->conn.fd, work, req);
 	queue_request(req);
 }
 
@@ -871,16 +864,12 @@ static void tx_work(struct work *work)
 		sd_err("failed to send a request");
 		conn->dead = true;
 	}
-
-	tracepoint(request, tx_work, conn->fd, work, req);
 }
 
 static void tx_main(struct work *work)
 {
 	struct client_info *ci = container_of(work, struct client_info,
 					      tx_work);
-
-	tracepoint(request, tx_main, ci->conn.fd, work, ci->tx_req);
 
 	refcount_dec(&ci->refcnt);
 
@@ -923,8 +912,6 @@ static void destroy_client(struct client_info *ci)
 static void clear_client_info(struct client_info *ci)
 {
 	struct request *req;
-
-	tracepoint(request, clear_client, ci->conn.fd);
 
 	sd_debug("connection seems to be dead");
 
@@ -978,8 +965,6 @@ static struct client_info *create_client(int fd)
 
 	INIT_LIST_HEAD(&ci->done_reqs);
 
-	tracepoint(request, create_client, fd);
-
 	return ci;
 }
 
@@ -1013,7 +998,6 @@ static void client_handler(int fd, int events, void *data)
 		refcount_inc(&ci->refcnt);
 		ci->rx_work.fn = rx_work;
 		ci->rx_work.done = rx_main;
-		tracepoint(request, queue_request, fd, &ci->rx_work, 1);
 		queue_work(sys->net_wqueue, &ci->rx_work);
 	}
 
@@ -1036,7 +1020,6 @@ static void client_handler(int fd, int events, void *data)
 		refcount_inc(&ci->refcnt);
 		ci->tx_work.fn = tx_work;
 		ci->tx_work.done = tx_main;
-		tracepoint(request, queue_request, fd, &ci->tx_work, 0);
 		queue_work(sys->net_wqueue, &ci->tx_work);
 	}
 }
