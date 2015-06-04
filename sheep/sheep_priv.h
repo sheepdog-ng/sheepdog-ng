@@ -425,7 +425,7 @@ void objlist_cache_format(void);
 int objlist_migrate_cache_insert(uint64_t oid, uint8_t ec_index);
 
 int start_recovery(struct vnode_info *cur_vinfo, struct vnode_info *, bool);
-bool oid_in_recovery(uint64_t oid);
+bool oid_in_recovery(uint64_t oid, uint8_t opcode);
 bool node_in_recovery(void);
 void get_recovery_state(struct recovery_state *state);
 

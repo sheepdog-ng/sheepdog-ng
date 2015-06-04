@@ -209,7 +209,7 @@ static bool request_in_recovery(struct request *req)
 		 */
 		return false;
 
-	if (oid_in_recovery(req->local_oid)) {
+	if (oid_in_recovery(req->local_oid, req->rq.opcode)) {
 		sd_debug("%"PRIx64" wait on oid", req->local_oid);
 		sleep_on_wait_queue(req);
 		return true;

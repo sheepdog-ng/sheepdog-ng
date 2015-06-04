@@ -600,7 +600,7 @@ static inline void prepare_schedule_oid(uint64_t oid)
 	resume_suspended_recovery();
 }
 
-main_fn bool oid_in_recovery(uint64_t oid)
+main_fn bool oid_in_recovery(uint64_t oid, uint8_t opcode)
 {
 	struct recovery_info *rinfo = main_thread_get(current_rinfo);
 	struct vnode_info *cur;
@@ -609,7 +609,13 @@ main_fn bool oid_in_recovery(uint64_t oid)
 		return false;
 
 	cur = rinfo->cur_vinfo;
-	if (sd_store->exist(oid, local_ec_index(cur, oid))) {
+	/*
+	 * For remove operatoin, we need to wait for object to recovered by
+	 * recovery thread, otherwise later recovery thread will recver the
+	 * object after it is removed.
+	 */
+	if ((opcode != SD_OP_REMOVE_OBJ && opcode != SD_OP_REMOVE_PEER) &&
+	    sd_store->exist(oid, local_ec_index(cur, oid))) {
 		sd_debug("the object %" PRIx64 " is already recovered", oid);
 		return false;
 	}
