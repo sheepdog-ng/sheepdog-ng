@@ -133,6 +133,7 @@ int default_cleanup(void)
 {
 	int ret;
 
+	objlist_migrate_cache_retire();
 	ret = for_each_obj_path(purge_stale_dir);
 	if (ret != SD_RES_SUCCESS)
 		return ret;
@@ -419,6 +420,8 @@ static int move_object_to_stale_dir(uint64_t oid, const char *wd,
 		       path);
 		return SD_RES_EIO;
 	}
+
+	objlist_migrate_cache_insert(oid, ec_index);
 
 	sd_debug("moved object %"PRIx64, oid);
 	return SD_RES_SUCCESS;

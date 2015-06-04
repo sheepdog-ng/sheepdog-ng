@@ -59,15 +59,15 @@
 #define SD_OP_GET_VDI_ATTR   0x89
 #define SD_OP_FORCE_RECOVER  0x8a
 #define SD_OP_GET_STORE_LIST 0x90
-#define SD_OP_SNAPSHOT       0x91
-#define SD_OP_RESTORE        0x92
-#define SD_OP_GET_SNAP_FILE  0x93
+/* #define SD_OP_SNAPSHOT       0x91 deleted */
+/* #define SD_OP_RESTORE        0x92 deleted */
+/* #define SD_OP_GET_SNAP_FILE  0x93 deleted */
 #define SD_OP_CLEANUP        0x94
 #define SD_OP_TRACE_STATUS   0x95
 #define SD_OP_TRACE_READ_BUF 0x96
 #define SD_OP_STAT_RECOVERY  0x97
 #define SD_OP_FLUSH_DEL_CACHE  0x98
-#define SD_OP_NOTIFY_VDI_DEL 0x99
+/* #define SD_OP_NOTIFY_VDI_DEL 0x99 deleted */
 #define SD_OP_KILL_NODE      0x9A
 #define SD_OP_TRACE_ENABLE   0x9B
 #define SD_OP_TRACE_DISABLE  0x9C

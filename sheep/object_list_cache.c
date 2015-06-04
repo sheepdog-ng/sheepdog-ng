@@ -15,6 +15,7 @@
 
 struct objlist_cache_entry {
 	uint64_t oid;
+	uint8_t ec_index;
 	struct rb_node node;
 };
 
@@ -27,13 +28,18 @@ struct objlist_cache {
 	struct sd_rw_lock lock;
 };
 
-struct objlist_deletion_work {
-	uint32_t vid;
-	struct work work;
+struct objlist_migrate_cache {
+	struct rb_root root;
+	struct sd_rw_lock lock;
 };
 
 static struct objlist_cache obj_list_cache = {
 	.tree_version	= 1,
+	.root		= RB_ROOT,
+	.lock		= SD_RW_LOCK_INITIALIZER,
+};
+
+static struct objlist_migrate_cache migrate_cache = {
 	.root		= RB_ROOT,
 	.lock		= SD_RW_LOCK_INITIALIZER,
 };
@@ -95,6 +101,61 @@ int objlist_cache_insert(uint64_t oid)
 	return 0;
 }
 
+int objlist_migrate_cache_insert(uint64_t oid, uint8_t ec_index)
+{
+	struct objlist_cache_entry *entry, *p;
+
+	entry = xmalloc(sizeof(*entry));
+	entry->oid = oid;
+	entry->ec_index = ec_index;
+	rb_init_node(&entry->node);
+
+	sd_write_lock(&migrate_cache.lock);
+	p = objlist_cache_rb_insert(&migrate_cache.root, entry);
+	if (p)
+		free(entry);
+	sd_rw_unlock(&migrate_cache.lock);
+
+	return 0;
+}
+
+/*
+ * oid might migrate from one node to the other during recovery, but we can't
+ * simply remove it from objlist cache once it is being migrated because oid
+ * would be lost at the stage of preparation of object list if no node get this
+ * oid in its list. Because of this, we face a stale oid problem:
+ *   if oid is being deleted in recovery and we can't remove it from list cache
+ *   as mentioned above, some node might have this oid in its list cache, thus
+ *   later recovery will try to recover non-existing oid.
+ *
+ *   1.
+ *      oid migrate
+ *   A -------------> B
+ *      now request remove(oid) is blocked and wait for oid recovery completion.
+ *   2.
+ *   both A and B has oid in the list cache
+ *   3
+ *   the remove request will only go to B, not A after being waked up.
+ *   4
+ *   So A still has oid in its list and later recvoery will fail on this oid.
+ *
+ *   That said, we need to remove this kind of mismatched oid. The good timing
+ *   to call this function is when all the nodes finish the recovery.
+ */
+void objlist_migrate_cache_retire(void)
+{
+	struct objlist_cache_entry *entry;
+
+	rb_for_each_entry(entry, &migrate_cache.root, node) {
+		/* For some reason, oid gets back during multiple node events */
+		if (sd_store->exist(entry->oid, entry->ec_index))
+			continue;
+		sd_debug("%"PRIx64, entry->oid);
+		objlist_cache_remove(entry->oid);
+	}
+	rb_destroy(&migrate_cache.root, struct objlist_cache_entry, node);
+}
+
 int get_obj_list(const struct sd_req *hdr, struct sd_rsp *rsp, void *data)
 {
 	int nr = 0;
@@ -129,71 +190,6 @@ out:
 	rsp->data_length = obj_list_cache.cache_size * sizeof(uint64_t);
 	memcpy(data, obj_list_cache.buf, rsp->data_length);
 	sd_rw_unlock(&obj_list_cache.lock);
-	return SD_RES_SUCCESS;
-}
-
-static void objlist_deletion_work(struct work *work)
-{
-	struct objlist_deletion_work *ow =
-		container_of(work, struct objlist_deletion_work, work);
-	struct objlist_cache_entry *entry;
-	uint32_t vid = ow->vid, entry_vid;
-
-	/*
-	 * Before reclaiming the cache belonging to the VDI just deleted,
-	 * we should test whether the VDI is exist, because after some node
-	 * deleting it and before the notification is sent to all the node,
-	 * another node may issue a VDI creation event and reused the VDI id
-	 * again, in which case we should not reclaim the cached entry.
-	 */
-	if (vdi_exist(vid)) {
-		sd_debug("VDI (%" PRIx32 ") is still in use, can not be"
-			 " deleted", vid);
-		return;
-	}
-
-	sd_write_lock(&obj_list_cache.lock);
-	rb_for_each_entry(entry, &obj_list_cache.root, node) {
-		entry_vid = oid_to_vid(entry->oid);
-		if (entry_vid != vid)
-			continue;
-
-		/* VDI objects cannot be removed even after we delete images. */
-		if (is_vdi_obj(entry->oid))
-			continue;
-
-		sd_debug("delete object entry %" PRIx64, entry->oid);
-		rb_erase(&entry->node, &obj_list_cache.root);
-		free(entry);
-	}
-	sd_rw_unlock(&obj_list_cache.lock);
-}
-
-static void objlist_deletion_done(struct work *work)
-{
-	struct objlist_deletion_work *ow =
-		container_of(work, struct objlist_deletion_work, work);
-	free(ow);
-}
-
-/*
- * During recovery, some objects may be migrated from one node to a
- * new one, but we can't remove the object list cache entry in this
- * case, it may causes recovery failure, so after recovery, we can
- * not locate the cache entry correctly, causing objlist_cache_remove()
- * fail to delete it, then we need this function to do the cleanup work
- * in all nodes.
- */
-int objlist_cache_cleanup(uint32_t vid)
-{
-	struct objlist_deletion_work *ow;
-
-	ow = xzalloc(sizeof(*ow));
-	ow->vid = vid;
-	ow->work.fn = objlist_deletion_work;
-	ow->work.done = objlist_deletion_done;
-	queue_work(sys->deletion_wqueue, &ow->work);
-
 	return SD_RES_SUCCESS;
 }
 

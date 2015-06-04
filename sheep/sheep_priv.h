@@ -422,8 +422,8 @@ uint32_t get_latest_epoch(void);
 void init_config_path(const char *base_path);
 int init_config_file(void);
 int get_obj_list(const struct sd_req *, struct sd_rsp *, void *);
-int objlist_cache_cleanup(uint32_t vid);
 void objlist_cache_format(void);
+int objlist_migrate_cache_insert(uint64_t oid, uint8_t ec_index);
 
 int start_recovery(struct vnode_info *cur_vinfo, struct vnode_info *, bool);
 bool oid_in_recovery(uint64_t oid);
@@ -450,6 +450,7 @@ void local_request_init(void);
 
 int objlist_cache_insert(uint64_t oid);
 void objlist_cache_remove(uint64_t oid);
+void objlist_migrate_cache_retire(void);
 
 void put_request(struct request *req);
 void get_request(struct request *req);

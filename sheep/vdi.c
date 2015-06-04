@@ -704,26 +704,8 @@ struct deletion_work {
 	int finish_fd;		/* eventfd for notifying finish */
 };
 
-static int notify_vdi_deletion(uint32_t vdi_id)
-{
-	struct sd_req hdr;
-	int ret;
-
-	sd_init_req(&hdr, SD_OP_NOTIFY_VDI_DEL);
-	hdr.flags = SD_FLAG_CMD_WRITE;
-	hdr.data_length = sizeof(vdi_id);
-
-	ret = exec_local_req(&hdr, &vdi_id);
-	if (ret != SD_RES_SUCCESS)
-		sd_err("fail to notify vdi deletion(%" PRIx32 "), %d", vdi_id,
-		       ret);
-
-	return ret;
-}
-
 struct delete_arg {
 	const struct sd_inode *inode;
-	uint32_t *nr_deleted;
 };
 
 static void delete_cb(struct sd_index *idx, void *arg, int ignore)
@@ -742,7 +724,6 @@ static void delete_cb(struct sd_index *idx, void *arg, int ignore)
 			if (ret != SD_RES_SUCCESS)
 				sd_err("remove object %" PRIx64 " fail, %d",
 				       oid, ret);
-			(*(darg->nr_deleted))++;
 		}
 	}
 }
@@ -752,7 +733,7 @@ static void delete_vdi_work(struct work *work)
 	struct deletion_work *dw =
 		container_of(work, struct deletion_work, work);
 	int ret = 0;
-	uint32_t i, nr_deleted, nr_objs;
+	uint32_t i, nr_objs;
 	struct sd_inode *inode = NULL;
 	uint32_t vdi_id = dw->target_vid;
 
@@ -771,7 +752,7 @@ static void delete_vdi_work(struct work *work)
 
 	if (inode->store_policy == 0) {
 		nr_objs = count_data_objs(inode);
-		for (nr_deleted = 0, i = 0; i < nr_objs; i++) {
+		for (i = 0; i < nr_objs; i++) {
 			uint64_t oid;
 			uint32_t vid = sd_inode_get_vid(inode, i);
 
@@ -785,15 +766,13 @@ static void delete_vdi_work(struct work *work)
 			if (ret != SD_RES_SUCCESS)
 				sd_err("discard ref %" PRIx64 " fail, %d",
 				       oid, ret);
-
-			nr_deleted++;
 		}
 	} else {
 		/*
 		 * todo: generational reference counting is not supported by
 		 * hypervolume yet
 		 */
-		struct delete_arg arg = {inode, &nr_deleted};
+		struct delete_arg arg = {inode};
 		sd_inode_index_walk(inode, delete_cb, &arg);
 	}
 
@@ -807,9 +786,6 @@ static void delete_vdi_work(struct work *work)
 
 	sd_write_object(vid_to_vdi_oid(vdi_id), (void *)inode,
 			sizeof(*inode), 0, false);
-
-	if (nr_deleted)
-		notify_vdi_deletion(vdi_id);
 out:
 	free(inode);
 	dw->succeed = true;

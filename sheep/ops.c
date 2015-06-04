@@ -679,14 +679,6 @@ static int cluster_notify_vdi_add(const struct sd_req *req, struct sd_rsp *rsp,
 	return SD_RES_SUCCESS;
 }
 
-static int cluster_notify_vdi_del(const struct sd_req *req, struct sd_rsp *rsp,
-				  void *data, const struct sd_node *sender)
-{
-	uint32_t vid = *(uint32_t *)data;
-
-	return objlist_cache_cleanup(vid);
-}
-
 static int cluster_delete_cache(const struct sd_req *req, struct sd_rsp *rsp,
 				void *data, const struct sd_node *sender)
 {
@@ -1352,13 +1344,6 @@ static struct sd_op_template sd_ops[] = {
 		.type = SD_OP_TYPE_CLUSTER,
 		.force = true,
 		.process_main = cluster_cleanup,
-	},
-
-	[SD_OP_NOTIFY_VDI_DEL] = {
-		.name = "NOTIFY_VDI_DEL",
-		.type = SD_OP_TYPE_CLUSTER,
-		.force = true,
-		.process_main = cluster_notify_vdi_del,
 	},
 
 	[SD_OP_NOTIFY_VDI_ADD] = {
