@@ -556,7 +556,7 @@ int sd_dec_object_refcnt(uint64_t data_oid, uint32_t generation,
 	int ret;
 	uint64_t ledger_oid = data_oid_to_ledger_oid(data_oid);
 
-	sd_debug("%"PRIx64", %" PRId32 ", %" PRId32,
+	sd_debug("%"PRIx64", ref %" PRId32 ", count %" PRId32,
 		 data_oid, generation, refcnt);
 
 	if (generation == 0 && refcnt == 0)

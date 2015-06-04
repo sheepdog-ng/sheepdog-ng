@@ -558,6 +558,8 @@ static int prepare_obj_refcnt(const struct sd_req *hdr, uint32_t *vids,
 	uint64_t offset;
 	int start;
 
+	sd_debug("%"PRIx64, hdr->obj.oid);
+
 	offset = hdr->obj.offset - offsetof(struct sd_inode, data_vdi_id);
 	start = offset / sizeof(*vids);
 
@@ -581,16 +583,55 @@ static int prepare_obj_refcnt(const struct sd_req *hdr, uint32_t *vids,
 }
 
 /*
- * This function decreases a refcnt of vid_to_data_oid(old_vid, idx) and
- * increases one of vid_to_data_oid(new_vid, idx)
+ * Unrefcnt the COW object in the range
+ *
+ *  snap1----snap2----clone
+ *
+ *  Object(O1) in the snap1 might be referenced either by snap2 or clone.
+ *  Object(O2) in the snap2 might be referenced by clone.
+ *  Object(O3) in the clone are owned by clone only and are not referenced by
+ *             others.
+ *
+ *  COW object is referenced by its own vdi and other vdi. O1 and O2 are COW
+ *  objects.
+ *
+ *  Assume clone has layout of objects:
+ *  [O1, O2, O1, N/A, N/A, O1, O1, O2, O2]
+ *   0   1   2   3    4    5   6   7   8
+ *
+ *  After write(data, clone[7])
+ *
+ *  [O1, O2, O1, N/A, N/A, O1, O1, O3, O2]
+ *   0   1   2   3    4    5   6   7   8
+ *
+ *  and an unrefcnt message will be sent to snap2 and clone.ref[7] will be set
+ *  as 0.
+ *
+ *  After remove(clone[5])
+ *
+ *  [O1, O2, O1, N/A, N/A, N/A, O1, O3, O2]
+ *   0   1   2   3    4    5    6   7   8
+ *
+ *  and an unrefcnt message will be sent to snap1 and clone.ref[5] will be set
+ *  as 0.
+ *
+ *  After write(data, clone[4])
+ *
+ *  [O1, O2, O1, N/A, O3, O1, O1, O3, O2]
+ *   0   1   2   3    4    5   6   7   8
+ *
+ *  and only set clone.ref[4] as 0.
+ *
+ *  Remove operation applies to snapshot vdi too.
  */
-static int update_obj_refcnt(const struct sd_req *hdr, uint32_t *vids,
-			     uint32_t *new_vids,
-			     struct generation_reference *refs)
+static int unrefcnt_cow_object(const struct sd_req *hdr, uint32_t *vids,
+			       uint32_t *new_vids,
+			       struct generation_reference *refs)
 {
 	int i, start, ret = SD_RES_SUCCESS;
 	size_t nr_vids = hdr->data_length / sizeof(*vids);
 	uint64_t offset;
+	bool need_update = false;
 
 	offset = hdr->obj.offset - offsetof(struct sd_inode, data_vdi_id);
 	start = offset / sizeof(*vids);
@@ -599,20 +640,29 @@ static int update_obj_refcnt(const struct sd_req *hdr, uint32_t *vids,
 		if (vids[i] == 0 || vids[i] == new_vids[i])
 			continue;
 
+		/* Unrefount a COW object in the referenced vdi */
 		ret = sd_dec_object_refcnt(vid_to_data_oid(vids[i], i + start),
 					   refs[i].generation, refs[i].count);
 		if (ret != SD_RES_SUCCESS)
 			sd_err("fail, %d", ret);
 
-		refs[i].generation = 0;
-		refs[i].count = 0;
+		if (refs[i].generation != 0 || refs[i].count != 0) {
+			need_update = true;
+			/* Zero refcnt for non-COW object */
+			refs[i].generation = 0;
+			refs[i].count = 0;
+		}
 	}
 
-	return sd_write_object(hdr->obj.oid, (char *)refs,
-			       nr_vids * sizeof(*refs),
-			       offsetof(struct sd_inode, gref)
-			       + start * sizeof(*refs),
-			       false);
+	sd_debug("oid %"PRIx64 ", need update: %d", hdr->obj.oid, need_update);
+	if (need_update)
+		return sd_write_object(hdr->obj.oid, (char *)refs,
+				       nr_vids * sizeof(*refs),
+				       offsetof(struct sd_inode, gref)
+				       + start * sizeof(*refs),
+				       false);
+	else
+		return SD_RES_SUCCESS;
 }
 
 int gateway_read_obj(struct request *req)
@@ -642,7 +692,6 @@ int gateway_write_obj(struct request *req)
 	if (!bypass_object_cache(req))
 		return object_cache_handle_request(req);
 
-
 	if (is_data_vid_update(hdr)) {
 		size_t nr_vids = hdr->data_length / sizeof(*vids);
 
@@ -659,8 +708,7 @@ int gateway_write_obj(struct request *req)
 		goto out;
 
 	if (is_data_vid_update(hdr)) {
-		sd_debug("update reference counts, %" PRIx64, hdr->obj.oid);
-		update_obj_refcnt(hdr, vids, new_vids, refs);
+		unrefcnt_cow_object(hdr, vids, new_vids, refs);
 	}
 out:
 	free(vids);
