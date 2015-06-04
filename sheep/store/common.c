@@ -549,28 +549,40 @@ int sd_discard_object(uint64_t oid)
 	return ret;
 }
 
-int sd_unrefcnt_object(uint64_t data_oid, uint32_t generation,
-			 uint32_t refcnt)
+
+/*
+ * Cow object: shared by more than one vdi. None-cow object is not shared by
+ * other vdi.
+ *
+ * When we unref the object, for
+ * cow: we send a unref message to the cluster.
+ * none-cow: we simply send a remove message to the cluster.
+ *
+ * When the references of the object become zero (no ref), then we can remove
+ * the object along with its ledger object, which bookkeeps the references of
+ * this object.
+ */
+int sd_unref_object(uint64_t data_oid, uint32_t generation, uint32_t refcnt)
 {
 	struct sd_req hdr;
 	int ret;
-	uint64_t ledger_oid = data_oid_to_ledger_oid(data_oid);
 
 	sd_debug("%"PRIx64", ref %" PRId32 ", count %" PRId32,
 		 data_oid, generation, refcnt);
 
+	/* No ledger created, so just remove data object */
 	if (generation == 0 && refcnt == 0)
 		return sd_remove_object(data_oid);
 
-	sd_init_req(&hdr, SD_OP_DECREF_OBJ);
-	hdr.ref.oid = ledger_oid;
+	sd_init_req(&hdr, SD_OP_UNREF_OBJ);
+	hdr.ref.oid = data_oid;
 	hdr.ref.generation = generation;
 	hdr.ref.count = refcnt;
 
 	ret = exec_local_req(&hdr, NULL);
 	if (ret != SD_RES_SUCCESS)
 		sd_err("failed to decrement reference %" PRIx64 ", %s",
-		       ledger_oid, sd_strerror(ret));
+		       data_oid, sd_strerror(ret));
 
 	return ret;
 }

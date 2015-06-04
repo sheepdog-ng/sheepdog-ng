@@ -1131,111 +1131,6 @@ static inline int local_nfs_delete(struct request *req)
 
 #endif
 
-static bool is_zero_ledger(uint32_t *ledger)
-{
-	for (int i = 0; i < SD_LEDGER_OBJ_SIZE / sizeof(uint32_t); i++)
-		if (ledger[i])
-			return false;
-
-	return true;
-}
-
-int peer_decref_object(struct request *req)
-{
-	struct sd_req *hdr = &req->rq;
-	int ret;
-	uint32_t epoch = hdr->epoch;
-	uint64_t ledger_oid = hdr->ref.oid;
-	uint64_t data_oid = ledger_oid_to_data_oid(ledger_oid);
-	uint32_t generation = hdr->ref.generation;
-	uint32_t count = hdr->ref.count;
-	uint32_t *ledger = NULL;
-	bool exist = false, locked;
-	static struct sd_mutex lock = SD_MUTEX_INITIALIZER;
-
-	sd_debug("%" PRIx64 ", %" PRIu32 ", %" PRIu32 ", %" PRIu32,
-		 ledger_oid, epoch, generation, count);
-
-	ledger = xvalloc(SD_LEDGER_OBJ_SIZE);
-	memset(ledger, 0, SD_LEDGER_OBJ_SIZE);
-
-	struct siocb iocb = {
-		.epoch = epoch,
-		.buf = ledger,
-		.length = SD_LEDGER_OBJ_SIZE,
-	};
-
-	/* we don't allow concurrent updates to the ledger objects */
-	sd_mutex_lock(&lock);
-	locked = true;
-
-	ret = sd_store->read(ledger_oid, &iocb);
-	switch (ret) {
-	case SD_RES_SUCCESS:
-		exist = true;
-		break;
-	case SD_RES_NO_OBJ:
-		/* initialize ledger */
-		ledger[0] = 1;
-		break;
-	default:
-		sd_err("failed to read ledger object %"PRIx64": %s",
-		       ledger_oid, sd_strerror(ret));
-		goto out;
-	}
-
-	ledger[generation]--;
-	ledger[generation + 1] += count;
-
-	if (is_zero_ledger(ledger)) {
-		struct sd_node *nodes[SD_MAX_COPIES];
-		int nr_copies;
-
-		nr_copies = get_obj_copy_number(ledger_oid,
-						req->vinfo->nr_zones);
-		memset(nodes, 0, sizeof(nodes));
-
-		/* reclaim object */
-		if (exist) {
-			ret = sd_store->remove_object(ledger_oid, -1);
-			if (ret != SD_RES_SUCCESS) {
-				sd_err("error %s", sd_strerror(ret));
-				goto out;
-			}
-		}
-		sd_mutex_unlock(&lock);
-		locked = false;
-
-		oid_to_nodes(ledger_oid, &req->vinfo->vroot, nr_copies,
-			     (const struct sd_node **)nodes);
-
-		if (!node_cmp(&sys->this_node, nodes[0])) {
-			/* only first one node needs to remove the object */
-			ret = sd_remove_object(data_oid);
-			if (ret != SD_RES_SUCCESS) {
-				sd_err("error %s", sd_strerror(ret));
-				goto out;
-			}
-		}
-	} else {
-		/* update ledger */
-		if (exist)
-			ret = sd_store->write(ledger_oid, &iocb);
-		else
-			ret = sd_store->create_and_write(ledger_oid, &iocb);
-
-		if (ret != SD_RES_SUCCESS)
-			sd_err("failed to update ledger object %"PRIx64": %s",
-			       ledger_oid, sd_strerror(ret));
-	}
-out:
-	if (locked)
-		sd_mutex_unlock(&lock);
-	free(ledger);
-
-	return ret;
-}
-
 static int local_repair_replica(struct request *req)
 {
 	int ret;
@@ -1632,31 +1527,31 @@ static struct sd_op_template sd_ops[] = {
 	[SD_OP_CREATE_AND_WRITE_OBJ] = {
 		.name = "CREATE_AND_WRITE_OBJ",
 		.type = SD_OP_TYPE_GATEWAY,
-		.process_work = gateway_create_and_write_obj,
+		.process_work = gateway_create_object,
 	},
 
 	[SD_OP_READ_OBJ] = {
 		.name = "READ_OBJ",
 		.type = SD_OP_TYPE_GATEWAY,
-		.process_work = gateway_read_obj,
+		.process_work = gateway_read_object,
 	},
 
 	[SD_OP_WRITE_OBJ] = {
 		.name = "WRITE_OBJ",
 		.type = SD_OP_TYPE_GATEWAY,
-		.process_work = gateway_write_obj,
+		.process_work = gateway_write_object,
 	},
 
 	[SD_OP_REMOVE_OBJ] = {
 		.name = "REMOVE_OBJ",
 		.type = SD_OP_TYPE_GATEWAY,
-		.process_work = gateway_remove_obj,
+		.process_work = gateway_remove_object,
 	},
 
-	[SD_OP_DECREF_OBJ] = {
-		.name = "DECREF_OBJ",
+	[SD_OP_UNREF_OBJ] = {
+		.name = "UNREF_OBJ",
 		.type = SD_OP_TYPE_GATEWAY,
-		.process_work = gateway_decref_object,
+		.process_work = gateway_unref_object,
 	},
 
 	/* peer I/O operations */
@@ -1682,12 +1577,6 @@ static struct sd_op_template sd_ops[] = {
 		.name = "REMOVE_PEER",
 		.type = SD_OP_TYPE_PEER,
 		.process_work = peer_remove_obj,
-	},
-
-	[SD_OP_DECREF_PEER] = {
-		.name = "DECREF_PEER",
-		.type = SD_OP_TYPE_PEER,
-		.process_work = peer_decref_object,
 	},
 };
 
@@ -1778,7 +1667,6 @@ static int map_table[] = {
 	[SD_OP_READ_OBJ] = SD_OP_READ_PEER,
 	[SD_OP_WRITE_OBJ] = SD_OP_WRITE_PEER,
 	[SD_OP_REMOVE_OBJ] = SD_OP_REMOVE_PEER,
-	[SD_OP_DECREF_OBJ] = SD_OP_DECREF_PEER,
 };
 
 int gateway_to_peer_opcode(int opcode)

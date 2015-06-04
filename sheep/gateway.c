@@ -550,8 +550,8 @@ out:
 	return err_ret;
 }
 
-static int prepare_obj_refcnt(const struct sd_req *hdr, uint32_t *vids,
-			      struct generation_reference *refs)
+static int prepare_object_refcnt(const struct sd_req *hdr, uint32_t *vids,
+				 struct generation_reference *refs)
 {
 	int ret;
 	size_t nr_vids = hdr->data_length / sizeof(*vids);
@@ -624,9 +624,9 @@ static int prepare_obj_refcnt(const struct sd_req *hdr, uint32_t *vids,
  *
  *  Remove operation applies to snapshot vdi too.
  */
-static int unrefcnt_cow_object(const struct sd_req *hdr, uint32_t *vids,
-			       uint32_t *new_vids,
-			       struct generation_reference *refs)
+static int unref_cow_object(const struct sd_req *hdr, uint32_t *vids,
+			    uint32_t *new_vids,
+			    struct generation_reference *refs)
 {
 	int i, start, ret = SD_RES_SUCCESS;
 	size_t nr_vids = hdr->data_length / sizeof(*vids);
@@ -641,8 +641,8 @@ static int unrefcnt_cow_object(const struct sd_req *hdr, uint32_t *vids,
 			continue;
 
 		/* Unrefount a COW object in the referenced vdi */
-		ret = sd_unrefcnt_object(vid_to_data_oid(vids[i], i + start),
-					   refs[i].generation, refs[i].count);
+		ret = sd_unref_object(vid_to_data_oid(vids[i], i + start),
+				      refs[i].generation, refs[i].count);
 		if (ret != SD_RES_SUCCESS)
 			sd_err("fail, %d", ret);
 
@@ -665,7 +665,7 @@ static int unrefcnt_cow_object(const struct sd_req *hdr, uint32_t *vids,
 		return SD_RES_SUCCESS;
 }
 
-int gateway_read_obj(struct request *req)
+int gateway_read_object(struct request *req)
 {
 	uint64_t oid = req->rq.obj.oid;
 
@@ -678,7 +678,7 @@ int gateway_read_obj(struct request *req)
 		return gateway_replication_read(req);
 }
 
-int gateway_write_obj(struct request *req)
+int gateway_write_object(struct request *req)
 {
 	uint64_t oid = req->rq.obj.oid;
 	int ret;
@@ -698,7 +698,7 @@ int gateway_write_obj(struct request *req)
 		/* read the previous vids to discard their references later */
 		vids = xzalloc(sizeof(*vids) * nr_vids);
 		refs = xzalloc(sizeof(*refs) * nr_vids);
-		ret = prepare_obj_refcnt(hdr, vids, refs);
+		ret = prepare_object_refcnt(hdr, vids, refs);
 		if (ret != SD_RES_SUCCESS)
 			goto out;
 	}
@@ -708,7 +708,7 @@ int gateway_write_obj(struct request *req)
 		goto out;
 
 	if (is_data_vid_update(hdr)) {
-		unrefcnt_cow_object(hdr, vids, new_vids, refs);
+		unref_cow_object(hdr, vids, new_vids, refs);
 	}
 out:
 	free(vids);
@@ -747,7 +747,7 @@ out:
 	return ret;
 }
 
-int gateway_create_and_write_obj(struct request *req)
+int gateway_create_object(struct request *req)
 {
 	uint64_t oid = req->rq.obj.oid;
 
@@ -763,12 +763,76 @@ int gateway_create_and_write_obj(struct request *req)
 	return gateway_forward_request(req);
 }
 
-int gateway_remove_obj(struct request *req)
+int gateway_remove_object(struct request *req)
 {
 	return gateway_forward_request(req);
 }
 
-int gateway_decref_object(struct request *req)
+static bool object_noref(uint32_t *ledger)
 {
-	return gateway_forward_request(req);
+
+	static uint32_t zero[1024];
+	int i;
+
+	for (i = 0; i < SD_LEDGER_OBJ_SIZE/sizeof(zero); i++) {
+		if (memcmp(zero, ledger, sizeof(zero)))
+			return false;
+		ledger += 1024;
+	}
+
+	return true;
+}
+
+int gateway_unref_object(struct request *req)
+{
+	struct sd_req *h = &req->rq;
+	uint64_t data_oid = h->ref.oid;
+	uint64_t ledger_oid = data_oid_to_ledger_oid(data_oid);
+	uint32_t generation = h->ref.generation;
+	uint32_t count = h->ref.count;
+	uint32_t *ledger = xvalloc(SD_LEDGER_OBJ_SIZE);
+	int ret, offset;
+
+	sd_debug("%"PRIx64 " gen %"PRIu32 ", count %"PRIu32, data_oid,
+		 generation, count);
+
+	ret = sd_read_object(ledger_oid, (char *)ledger, SD_LEDGER_OBJ_SIZE, 0);
+	switch (ret) {
+	case SD_RES_SUCCESS:
+		break;
+	case SD_RES_NO_OBJ:
+		/* We create ledger when we access it first time */
+		sd_debug("create ref %"PRIx64, data_oid);
+		ledger[0] = 1;
+		ledger[generation]--;
+		ledger[generation + 1] += count;
+		ret = sd_write_object(ledger_oid, (char *)ledger,
+				      SD_LEDGER_OBJ_SIZE, 0, true);
+		/* fall thru */
+	default:
+		goto out;
+	}
+
+	ledger[generation]--;
+	ledger[generation + 1] += count;
+
+	if (object_noref(ledger)) {
+		sd_debug("remove %"PRIx64, data_oid);
+		ret = sd_remove_object(data_oid);
+		if (ret != SD_RES_SUCCESS && ret != SD_RES_NO_OBJ)
+			goto out;
+
+		ret = sd_remove_object(ledger_oid);
+		if (ret == SD_RES_NO_OBJ)
+			ret = SD_RES_SUCCESS;
+		goto out;
+	}
+
+	sd_debug("update ref %"PRIx64, data_oid);
+	offset = generation * sizeof(uint32_t);
+	ret = sd_write_object(ledger_oid, (char *)ledger + offset,
+			      sizeof(uint32_t) * 2, offset, false);
+out:
+	free(ledger);
+	return ret;
 }

@@ -745,9 +745,8 @@ int vdi_delete(uint32_t vid)
 				continue;
 
 			oid = vid_to_data_oid(vdi_id, i);
-			ret = sd_unrefcnt_object(oid,
-						 inode->gref[i].generation,
-						 inode->gref[i].count);
+			ret = sd_unref_object(oid, inode->gref[i].generation,
+					      inode->gref[i].count);
 			/*
 			 * Return error if we fail to remove any object.
 			 *

@@ -102,8 +102,8 @@
 #define SD_OP_CLUSTER_INFO	0xBE
 #define SD_OP_ALTER_CLUSTER_COPY	0xBF
 /* #define SD_OP_ALTER_VDI_COPY	0xC0 */
-#define SD_OP_DECREF_OBJ     0xC1
-#define SD_OP_DECREF_PEER    0xC2
+#define SD_OP_UNREF_OBJ     0xC1
+/* #define SD_OP_UNREF_PEER    0xC2 */
 /* #define SD_OP_PREVENT_INODE_UPDATE    0xC3 */
 /* #define SD_OP_ALLOW_INODE_UPDATE      0xC4 */
 #define SD_OP_REPAIR_REPLICA	0xC5
