@@ -726,7 +726,7 @@ int vdi_delete(uint32_t vid)
 				  (void *)inode, sizeof(*inode), 0);
 
 	if (ret != SD_RES_SUCCESS) {
-		sd_err("cannot find VDI object");
+		sd_err("cannot read inode %"PRIx32, vid);
 		goto out;
 	}
 
@@ -748,8 +748,16 @@ int vdi_delete(uint32_t vid)
 			ret = sd_unrefcnt_object(oid,
 						 inode->gref[i].generation,
 						 inode->gref[i].count);
-			if (ret != SD_RES_SUCCESS)
+			/*
+			 * Return error if we fail to remove any object.
+			 *
+			 * We don't update inode to boost delete performance,
+			 * users can continue deletion until success.
+			 */
+			if (ret != SD_RES_SUCCESS && ret != SD_RES_NO_OBJ) {
 				sd_err("unref %" PRIx64 " fail, %d", oid, ret);
+				goto out;
+			}
 		}
 	} else {
 		/*
@@ -759,6 +767,7 @@ int vdi_delete(uint32_t vid)
 		sd_inode_index_walk(inode, delete_cb, inode);
 	}
 
+	/* We can't delete inode due to vdi allocation logic, just zero name. */
 	inode->vdi_size = 0;
 	memset(inode->name, 0, sizeof(inode->name));
 	ret = sd_write_object(vid_to_vdi_oid(vid), (void *)inode,
