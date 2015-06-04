@@ -697,26 +697,15 @@ int read_vdis(char *data, int len, unsigned int *rsp_len)
 	return SD_RES_SUCCESS;
 }
 
-struct deletion_work {
-	struct work work;
-	uint32_t target_vid;
-	bool succeed;
-	int finish_fd;		/* eventfd for notifying finish */
-};
-
-struct delete_arg {
-	const struct sd_inode *inode;
-};
-
 static void delete_cb(struct sd_index *idx, void *arg, int ignore)
 {
-	struct delete_arg *darg = (struct delete_arg *)arg;
+	struct sd_inode *inode = arg;
 	uint64_t oid;
 	int ret;
 
 	if (idx->vdi_id) {
 		oid = vid_to_data_oid(idx->vdi_id, idx->idx);
-		if (idx->vdi_id != darg->inode->vdi_id)
+		if (idx->vdi_id != inode->vdi_id)
 			sd_debug("object %" PRIx64 " is base's data, would"
 				 " not be deleted.", oid);
 		else {
@@ -728,22 +717,16 @@ static void delete_cb(struct sd_index *idx, void *arg, int ignore)
 	}
 }
 
-static void delete_vdi_work(struct work *work)
+int vdi_delete(uint32_t vid)
 {
-	struct deletion_work *dw =
-		container_of(work, struct deletion_work, work);
-	int ret = 0;
-	uint32_t i, nr_objs;
-	struct sd_inode *inode = NULL;
-	uint32_t vdi_id = dw->target_vid;
+	struct sd_inode *inode = xvalloc(sizeof(*inode));
+	int ret;
 
-	inode = xvalloc(sizeof(*inode));
-	ret = read_backend_object(vid_to_vdi_oid(vdi_id),
+	ret = read_backend_object(vid_to_vdi_oid(vid),
 				  (void *)inode, sizeof(*inode), 0);
 
 	if (ret != SD_RES_SUCCESS) {
 		sd_err("cannot find VDI object");
-		dw->succeed = false;
 		goto out;
 	}
 
@@ -751,88 +734,40 @@ static void delete_vdi_work(struct work *work)
 		goto out;
 
 	if (inode->store_policy == 0) {
+		size_t nr_objs, i;
+
 		nr_objs = count_data_objs(inode);
 		for (i = 0; i < nr_objs; i++) {
+			uint32_t vdi_id = sd_inode_get_vid(inode, i);
 			uint64_t oid;
-			uint32_t vid = sd_inode_get_vid(inode, i);
 
 			if (!vid)
 				continue;
 
-			oid = vid_to_data_oid(vid, i);
-			ret = sd_dec_object_refcnt(oid,
-						inode->gref[i].generation,
-						inode->gref[i].count);
+			oid = vid_to_data_oid(vdi_id, i);
+			ret = sd_unrefcnt_object(oid,
+						 inode->gref[i].generation,
+						 inode->gref[i].count);
 			if (ret != SD_RES_SUCCESS)
-				sd_err("discard ref %" PRIx64 " fail, %d",
-				       oid, ret);
+				sd_err("unref %" PRIx64 " fail, %d", oid, ret);
 		}
 	} else {
 		/*
 		 * todo: generational reference counting is not supported by
 		 * hypervolume yet
 		 */
-		struct delete_arg arg = {inode};
-		sd_inode_index_walk(inode, delete_cb, &arg);
+		sd_inode_index_walk(inode, delete_cb, inode);
 	}
-
-	if (vdi_is_deleted(inode))
-		goto out;
 
 	inode->vdi_size = 0;
 	memset(inode->name, 0, sizeof(inode->name));
 	memset((char *)inode + SD_INODE_HEADER_SIZE, 0,
 	       SD_INODE_SIZE - SD_INODE_HEADER_SIZE);
 
-	sd_write_object(vid_to_vdi_oid(vdi_id), (void *)inode,
-			sizeof(*inode), 0, false);
+	ret = sd_write_object(vid_to_vdi_oid(vid), (void *)inode,
+			      sizeof(*inode), 0, false);
 out:
 	free(inode);
-	dw->succeed = true;
-}
-
-static void delete_vdi_done(struct work *work)
-{
-	struct deletion_work *dw =
-		container_of(work, struct deletion_work, work);
-
-	eventfd_xwrite(dw->finish_fd, 1);
-	if (!dw->succeed)
-		sd_err("deleting vdi: %x failed", dw->target_vid);
-	/* the deletion work is completed */
-	free(dw);
-}
-
-int vdi_delete(uint32_t vid)
-{
-	struct deletion_work *dw = NULL;
-	int ret = SD_RES_SUCCESS, finish_fd;
-
-	dw = xzalloc(sizeof(*dw));
-	dw->target_vid = vid;
-	finish_fd = dw->finish_fd = eventfd(0, 0);
-	if (dw->finish_fd < 0) {
-		sd_err("cannot create an eventfd for notifying finish of"
-		       " deletion info: %m");
-		goto out;
-	}
-
-	dw->work.fn = delete_vdi_work;
-	dw->work.done = delete_vdi_done;
-
-	queue_work(sys->deletion_wqueue, &dw->work);
-
-	/*
-	 * the event fd is written by delete_vdi_done(), when all reference
-	 * counters are decremented
-	 */
-	eventfd_xread(finish_fd);
-	close(finish_fd);
-
-	return ret;
-out:
-	free(dw);
-
 	return ret;
 }
 

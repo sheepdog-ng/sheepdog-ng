@@ -641,7 +641,7 @@ static int unrefcnt_cow_object(const struct sd_req *hdr, uint32_t *vids,
 			continue;
 
 		/* Unrefount a COW object in the referenced vdi */
-		ret = sd_dec_object_refcnt(vid_to_data_oid(vids[i], i + start),
+		ret = sd_unrefcnt_object(vid_to_data_oid(vids[i], i + start),
 					   refs[i].generation, refs[i].count);
 		if (ret != SD_RES_SUCCESS)
 			sd_err("fail, %d", ret);

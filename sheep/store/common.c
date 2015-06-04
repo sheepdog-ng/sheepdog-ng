@@ -549,7 +549,7 @@ int sd_discard_object(uint64_t oid)
 	return ret;
 }
 
-int sd_dec_object_refcnt(uint64_t data_oid, uint32_t generation,
+int sd_unrefcnt_object(uint64_t data_oid, uint32_t generation,
 			 uint32_t refcnt)
 {
 	struct sd_req hdr;

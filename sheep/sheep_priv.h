@@ -438,7 +438,7 @@ int sd_read_object(uint64_t oid, char *data, unsigned int datalen,
 		   uint64_t offset);
 int sd_remove_object(uint64_t oid);
 int sd_discard_object(uint64_t oid);
-int sd_dec_object_refcnt(uint64_t data_oid, uint32_t generation,
+int sd_unrefcnt_object(uint64_t data_oid, uint32_t generation,
 			 uint32_t refcnt);
 
 struct request_iocb *local_req_init(void);
