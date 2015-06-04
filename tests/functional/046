@@ -4,13 +4,13 @@
 
 . ./common
 
-for i in `seq 0 5`; do
+for i in `seq 0 2`; do
     _start_sheep $i
 done
 
-_wait_for_sheep 6
+_wait_for_sheep 3
 
-_cluster_format -c 6
+_cluster_format -c 2
 
 echo "delete snapshot image before current one"
 _vdi_create test 4G
@@ -36,4 +36,45 @@ _vdi_list
 
 $DOG vdi delete test -s snap
 $DOG vdi delete test -s snap # error
+_vdi_list
+
+# Test vdi deletio while in recovery
+
+_vdi_create test 512M -P
+$DOG vdi snapshot test -s snap
+
+for i in `seq 0 49`; do
+    echo $i | $DOG vdi write test $((i * 4 * 1024 * 1024)) 512
+done
+
+$DOG vdi clone test -s snap clone
+
+for i in `seq 25 74`; do
+    echo $i*2 | $DOG vdi write test $((i * 4 * 1024 * 1024)) 512
+done
+
+echo "delete snapshot"
+$DOG vdi delete test -s snap &
+_start_sheep 3
+_wait_for_sheep 4
+wait
+_wait_for_sheep_recovery 0
+_node_info
+
+echo "delete test"
+$DOG vdi delete test &
+_kill_sheep 1
+wait
+_wait_for_sheep_recovery 0
+_node_info | grep -v ^1
+
+echo "delete clone"
+$DOG vdi delete clone &
+_start_sheep 4
+_start_sheep 5
+_wait_for_sheep 5
+wait
+_wait_for_sheep_recovery 0
+_node_info | grep -v ^1
+
 _vdi_list
