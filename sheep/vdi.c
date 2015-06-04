@@ -761,11 +761,8 @@ int vdi_delete(uint32_t vid)
 
 	inode->vdi_size = 0;
 	memset(inode->name, 0, sizeof(inode->name));
-	memset((char *)inode + SD_INODE_HEADER_SIZE, 0,
-	       SD_INODE_SIZE - SD_INODE_HEADER_SIZE);
-
 	ret = sd_write_object(vid_to_vdi_oid(vid), (void *)inode,
-			      sizeof(*inode), 0, false);
+			      SD_INODE_HEADER_SIZE, 0, false);
 out:
 	free(inode);
 	return ret;
