@@ -622,7 +622,7 @@ static void get_vdi_bitmap(const struct rb_root *nroot,
 
 	w->work.fn = do_get_vdi_bitmap;
 	w->work.done = get_vdi_bitmap_done;
-	queue_work(sys->block_wqueue, &w->work);
+	queue_work(sys->recovery_wqueue, &w->work);
 }
 
 void wait_get_vdi_bitmap_done(void)
