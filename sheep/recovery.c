@@ -38,10 +38,6 @@ struct recovery_obj_work {
 
 	uint64_t oid; /* the object to be recovered */
 	bool stop;
-
-	/* local replica in the stale directory */
-	uint32_t local_epoch;
-	uint8_t local_sha1[SHA1_DIGEST_SIZE];
 };
 
 /*
@@ -244,8 +240,6 @@ static int recover_object_from(struct recovery_obj_work *row,
 			       uint32_t tgt_epoch)
 {
 	uint64_t oid = row->oid;
-	uint32_t local_epoch = row->local_epoch;
-	uint8_t *sha1 = row->local_sha1;
 	uint32_t epoch = row->base.epoch;
 	int ret;
 	unsigned rlen;
@@ -253,26 +247,6 @@ static int recover_object_from(struct recovery_obj_work *row,
 	struct sd_req hdr;
 	struct sd_rsp *rsp = (struct sd_rsp *)&hdr;
 	struct siocb iocb = { 0 };
-
-	/* compare sha1 hash value first */
-	if (local_epoch > 0) {
-		sd_init_req(&hdr, SD_OP_GET_HASH);
-		hdr.obj.oid = oid;
-		hdr.obj.tgt_epoch = tgt_epoch;
-		ret = sheep_exec_req(&node->nid, &hdr, NULL);
-		if (ret != SD_RES_SUCCESS)
-			return ret;
-
-		if (memcmp(rsp->hash.digest, sha1, SHA1_DIGEST_SIZE) == 0) {
-			sd_debug("use local replica at epoch %d", local_epoch);
-			ret = sd_store->link(oid, local_epoch);
-			if (ret == SD_RES_SUCCESS)
-				return ret;
-		} else {
-			/* Non-identical, bury the mind */
-			row->local_epoch = 0;
-		}
-	}
 
 	if (node_is_local(node)) {
 		if (tgt_epoch < sys_epoch())
@@ -547,24 +521,12 @@ static void recover_object_work(struct work *work)
 						     base);
 	uint64_t oid = row->oid;
 	struct vnode_info *cur = rw->cur_vinfo;
-	int ret, epoch;
+	int ret;
 
 	if (sd_store->exist(oid, local_ec_index(cur, oid))) {
 		sd_debug("the object is already recovered");
 		return;
 	}
-
-	/* find object in the stale directory */
-	if (!is_erasure_oid(oid))
-		for (epoch = sys_epoch() - 1; epoch > 0; epoch--) {
-			ret = sd_store->get_hash(oid, epoch, row->local_sha1);
-			if (ret == SD_RES_SUCCESS) {
-				sd_debug("replica found in local at epoch %d",
-					 epoch);
-				row->local_epoch = epoch;
-				break;
-			}
-		}
 
 	ret = do_recover_object(row);
 	if (ret != 0)
