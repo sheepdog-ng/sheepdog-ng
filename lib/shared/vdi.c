@@ -467,3 +467,48 @@ out:
 	return ret;
 }
 
+int sd_vdi_delete(struct sd_cluster *c, char *name, char *tag)
+{
+	int ret;
+	struct sd_req hdr = {};
+	struct sd_rsp *rsp = (struct sd_rsp *)&hdr;
+	char data[SD_MAX_VDI_LEN + SD_MAX_VDI_TAG_LEN];
+	uint32_t vid;
+
+	if (!name || *name == '\0') {
+		fprintf(stderr, "VDI name can NOT be null!\n");
+		return SD_RES_INVALID_PARMS;
+	}
+
+	ret = find_vdi(c, name, tag, &vid);
+	if (ret != SD_RES_SUCCESS) {
+		fprintf(stderr, "Failed to find VDI %s "
+				"(snapshot tag: %s): %s\n",
+				name, tag, sd_strerr(ret));
+		return ret;
+	}
+
+	hdr.opcode = SD_OP_DEL_VDI;
+	hdr.flags = SD_FLAG_CMD_WRITE;
+	hdr.data_length = sizeof(data);
+
+	memset(data, 0, sizeof(data));
+	pstrcpy(data, SD_MAX_VDI_LEN, name);
+	if (tag)
+		pstrcpy(data + SD_MAX_VDI_LEN, SD_MAX_VDI_TAG_LEN, tag);
+
+	ret = sd_run_sdreq(c, &hdr, data);
+
+	if (ret != SD_RES_SUCCESS) {
+		fprintf(stderr, "Failed to delete VDI %s(tag:%s): %s\n",
+				name, tag, sd_strerr(ret));
+		return ret;
+	}
+	if (rsp->result != SD_RES_SUCCESS) {
+		ret = rsp->result;
+		fprintf(stderr, "Failed to delete VDI %s(tag:%s): %s\n",
+				name, tag, sd_strerr(ret));
+	}
+
+	return ret;
+}

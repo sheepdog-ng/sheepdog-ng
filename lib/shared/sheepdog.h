@@ -162,4 +162,16 @@ int sd_vdi_create(struct sd_cluster *c, char *name, uint64_t size);
 int sd_vdi_clone(struct sd_cluster *c, char *srcname,
 		 char *srctag, char *dstname);
 
+/*
+ * Delete a VDI in the cluster
+ *
+ * @c: pointer to the vdi descriptor
+ * @name: the name of the VDI to be deleted
+ * @tag: the snapshot tag of the VDI
+ *
+ * Return error code defined in sheepdog_proto.h
+ * To delete a working VDI, set tag to NULL.
+ */
+int sd_vdi_delete(struct sd_cluster *c, char *name, char *tag);
+
 #endif
