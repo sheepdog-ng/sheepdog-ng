@@ -53,12 +53,6 @@ struct sd_op_template {
 			    void *data, const struct sd_node *sender);
 };
 
-/*
- * The last gathered epoch is the epoch at which all the nodes complete the
- * recovery and purge the stale objects.
- */
-uint32_t last_gathered_epoch = 1;
-
 static int stat_sheep(uint64_t *store_size, uint64_t *store_free,
 		      uint32_t epoch)
 {
@@ -716,7 +710,6 @@ static int cluster_recovery_completion(const struct sd_req *req,
 		}
 		if (i == nr_recovereds) {
 			sd_notice("all nodes are recovered, epoch %d", epoch);
-			last_gathered_epoch = epoch;
 			/* sd_store can be NULL if this node is a gateway */
 			if (vnode_info->nr_zones >= ec_max_data_strip() &&
 			    sd_store && sd_store->cleanup)

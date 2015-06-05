@@ -478,8 +478,6 @@ int do_process_main(const struct sd_op_template *op, const struct sd_req *req,
 		    const struct sd_node *sender);
 int gateway_to_peer_opcode(int opcode);
 
-extern uint32_t last_gathered_epoch;
-
 static inline bool vnode_is_local(const struct sd_vnode *v)
 {
 	return node_id_cmp(&v->node->nid, &sys->this_node.nid) == 0;

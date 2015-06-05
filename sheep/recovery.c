@@ -103,7 +103,7 @@ static struct vnode_info *rollback_vnode_info(uint32_t *epoch,
 
 rollback:
 	*epoch -= 1;
-	if ((!ec && *epoch < last_gathered_epoch) || !*epoch)
+	if (!*epoch)
 		return NULL;
 
 	nr_nodes = get_nodes_epoch(*epoch, cur, nodes, sizeof(nodes));
@@ -556,8 +556,7 @@ static void recover_object_work(struct work *work)
 
 	/* find object in the stale directory */
 	if (!is_erasure_oid(oid))
-		for (epoch = sys_epoch() - 1; epoch >= last_gathered_epoch;
-		     epoch--) {
+		for (epoch = sys_epoch() - 1; epoch > 0; epoch--) {
 			ret = sd_store->get_hash(oid, epoch, row->local_sha1);
 			if (ret == SD_RES_SUCCESS) {
 				sd_debug("replica found in local at epoch %d",
