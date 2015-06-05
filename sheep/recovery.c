@@ -57,11 +57,6 @@ struct recovery_info {
 	uint64_t done;
 	uint64_t next;
 
-	/*
-	 * true when automatic recovery is disabled
-	 * and no recovery work is running
-	 */
-	bool suspended;
 	bool notify_complete;
 
 	uint64_t count;
@@ -596,8 +591,6 @@ static inline void prepare_schedule_oid(uint64_t oid)
 				    rinfo->nr_prio_oids * sizeof(uint64_t));
 	rinfo->prio_oids[rinfo->nr_prio_oids - 1] = oid;
 	sd_debug("%"PRIx64" nr_prio_oids %"PRIu64, oid, rinfo->nr_prio_oids);
-
-	resume_suspended_recovery();
 }
 
 main_fn bool oid_in_recovery(uint64_t oid, uint8_t opcode)
@@ -639,10 +632,7 @@ main_fn bool oid_in_recovery(uint64_t oid, uint8_t opcode)
 
 		if (xlfind(&oid, rinfo->oids + rinfo->done,
 			   rinfo->next - rinfo->done, oid_cmp)) {
-			if (rinfo->suspended)
-				break;
 			/*
-			 * When recovery is not suspended,
 			 * rinfo->oids[rinfo->done .. rinfo->next) is currently
 			 * being recovered and no need to call
 			 * prepare_schedule_oid().
@@ -841,18 +831,6 @@ done:
 	rinfo->nr_prio_oids = 0;
 }
 
-/*
- * When automatic object recovery is disabled, the behavior of the
- * recovery process is like 'lazy recovery'.  This function returns
- * true if the recovery queue contains objects being accessed by
- * clients.  Sheep recovers such objects for availability even when
- * automatic object recovery is not enabled.
- */
-static bool has_scheduled_objects(struct recovery_info *rinfo)
-{
-	return rinfo->done < rinfo->nr_scheduled_prio_oids;
-}
-
 static void recover_next_object(struct recovery_info *rinfo)
 {
 	if (run_next_rw())
@@ -861,13 +839,6 @@ static void recover_next_object(struct recovery_info *rinfo)
 	if (rinfo->nr_prio_oids)
 		finish_schedule_oids(rinfo);
 
-	if (sys->cinfo.disable_recovery && !has_scheduled_objects(rinfo)) {
-		sd_debug("suspended");
-		rinfo->suspended = true;
-		/* suspend until resume_suspended_recovery() is called */
-		return;
-	}
-
 	/* no more objects to be recovered */
 	if (rinfo->next >= rinfo->count)
 		return;
@@ -875,16 +846,6 @@ static void recover_next_object(struct recovery_info *rinfo)
 	/* Try recover next object */
 	queue_recovery_work(rinfo);
 	rinfo->next++;
-}
-
-void resume_suspended_recovery(void)
-{
-	struct recovery_info *rinfo = main_thread_get(current_rinfo);
-
-	if (rinfo && rinfo->suspended) {
-		rinfo->suspended = false;
-		recover_next_object(rinfo);
-	}
 }
 
 static void recover_object_main(struct work *work)
@@ -1137,12 +1098,6 @@ int start_recovery(struct vnode_info *cur_vinfo, struct vnode_info *old_vinfo,
 		if (nrinfo)
 			free_recovery_info(nrinfo);
 		sd_debug("recovery skipped");
-
-		/*
-		 * This is necessary to invoke run_next_rw when
-		 * recovery work is suspended.
-		 */
-		resume_suspended_recovery();
 	} else {
 		main_thread_set(current_rinfo, rinfo);
 		queue_recovery_work(rinfo);

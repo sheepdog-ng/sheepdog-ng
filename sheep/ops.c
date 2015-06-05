@@ -362,21 +362,6 @@ static int cluster_shutdown(const struct sd_req *req, struct sd_rsp *rsp,
 	return SD_RES_SUCCESS;
 }
 
-static int cluster_enable_recover(const struct sd_req *req, struct sd_rsp *rsp,
-				  void *data, const struct sd_node *sender)
-{
-	sys->cinfo.disable_recovery = false;
-	resume_suspended_recovery();
-	return SD_RES_SUCCESS;
-}
-
-static int cluster_disable_recover(const struct sd_req *req, struct sd_rsp *rsp,
-				   void *data, const struct sd_node *sender)
-{
-	sys->cinfo.disable_recovery = true;
-	return SD_RES_SUCCESS;
-}
-
 static int cluster_get_vdi_attr(struct request *req)
 {
 	const struct sd_req *hdr = &req->rq;
@@ -500,7 +485,6 @@ static int local_stat_cluster(struct request *req)
 		/* some filed only need to store in first elog */
 		if (i == 0) {
 			elog->ctime = sys->cinfo.ctime;
-			elog->disable_recovery = sys->cinfo.disable_recovery;
 			elog->nr_copies = sys->cinfo.nr_copies;
 			elog->copy_policy = sys->cinfo.copy_policy;
 			elog->flags = sys->cinfo.flags;
@@ -1284,20 +1268,6 @@ static struct sd_op_template sd_ops[] = {
 		.type = SD_OP_TYPE_CLUSTER,
 		.is_admin_op = true,
 		.process_main = cluster_reweight,
-	},
-
-	[SD_OP_ENABLE_RECOVER] = {
-		.name = "ENABLE_RECOVER",
-		.type = SD_OP_TYPE_CLUSTER,
-		.is_admin_op = true,
-		.process_main = cluster_enable_recover,
-	},
-
-	[SD_OP_DISABLE_RECOVER] = {
-		.name = "DISABLE_RECOVER",
-		.type = SD_OP_TYPE_CLUSTER,
-		.is_admin_op = true,
-		.process_main = cluster_disable_recover,
 	},
 
 	[SD_OP_ALTER_CLUSTER_COPY] = {

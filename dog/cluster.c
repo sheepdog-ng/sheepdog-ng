@@ -205,8 +205,7 @@ retry:
 	if (!raw_output)
 		printf("Cluster status: ");
 	if (rsp->result == SD_RES_SUCCESS)
-		printf("running, auto-recovery %s\n", logs->disable_recovery ?
-		       "disabled" : "enabled");
+		printf("running, auto-recovery enabled\n");
 	else
 		printf("%s\n", sd_strerror(rsp->result));
 
@@ -569,45 +568,10 @@ static int cluster_force_recover(int argc, char **argv)
 	return EXIT_SUCCESS;
 }
 
-static int cluster_disable_recover(int argc, char **argv)
-{
-	int ret;
-	struct sd_req hdr;
-
-	sd_init_req(&hdr, SD_OP_DISABLE_RECOVER);
-
-	ret = send_light_req(&sd_nid, &hdr);
-	if (ret)
-		return EXIT_FAILURE;
-
-	printf("Cluster recovery: disable\n");
-	return EXIT_SUCCESS;
-}
-
-static int cluster_enable_recover(int argc, char **argv)
-{
-	int ret;
-	struct sd_req hdr;
-
-	sd_init_req(&hdr, SD_OP_ENABLE_RECOVER);
-
-	ret = send_light_req(&sd_nid, &hdr);
-	if (ret)
-		return EXIT_FAILURE;
-
-	printf("Cluster recovery: enable\n");
-	return EXIT_SUCCESS;
-}
-
 /* Subcommand list of recover */
 static struct subcommand cluster_recover_cmd[] = {
 	{"force", NULL, NULL, "force recover cluster immediately",
 	 NULL, 0, cluster_force_recover},
-	{"enable", NULL, NULL, "enable automatic recovery and "
-				"run once recover if necessary",
-	 NULL, 0, cluster_enable_recover},
-	{"disable", NULL, NULL, "disable automatic recovery",
-	 NULL, 0, cluster_disable_recover},
 	{NULL},
 };
 

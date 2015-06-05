@@ -385,7 +385,6 @@ int get_nr_copies(struct vnode_info *vnode_info);
 void wakeup_requests_on_epoch(void);
 void wakeup_requests_on_oid(uint64_t oid);
 void wakeup_all_requests(void);
-void resume_suspended_recovery(void);
 
 int create_cluster(int port, int64_t zone, int nr_vnodes,
 		   bool explicit_addr);

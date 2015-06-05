@@ -4,6 +4,8 @@
 
 . ./common
 
+_notrun "manual recovery is removed"
+
 for i in `seq 0 7`; do
     _start_sheep $i
 done

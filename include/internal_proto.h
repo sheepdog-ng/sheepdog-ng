@@ -78,8 +78,8 @@
 #define SD_OP_WRITE_PEER     0xA5
 #define SD_OP_REMOVE_PEER    0xA6
 /* #define SD_OP_SET_CACHE_SIZE 0xA7 deleted */
-#define SD_OP_ENABLE_RECOVER 0xA8
-#define SD_OP_DISABLE_RECOVER 0xA9
+/* #define SD_OP_ENABLE_RECOVER 0xA8 deleted */
+/* #define SD_OP_DISABLE_RECOVER 0xA9 deleted */
 /* #define SD_OP_GET_VDI_COPIES 0xAB deleted */
 #define SD_OP_COMPLETE_RECOVERY 0xAC
 #define SD_OP_FLUSH_NODES 0xAD
@@ -205,7 +205,7 @@ struct oid_entry {
  */
 struct cluster_info {
 	uint8_t proto_ver; /* the version number of the internal protocol */
-	uint8_t disable_recovery;
+	uint8_t pad;
 	int16_t nr_nodes;
 	uint32_t epoch;
 	uint64_t ctime;
@@ -226,7 +226,7 @@ struct epoch_log {
 	uint64_t time;		/* treated as time_t */
 	uint32_t epoch;
 	uint32_t nr_nodes;
-	uint8_t  disable_recovery;
+	uint8_t  pad;
 	uint8_t  nr_copies;
 	uint8_t  copy_policy;
 	uint8_t  __pad[3];
