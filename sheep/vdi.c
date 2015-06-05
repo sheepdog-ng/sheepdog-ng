@@ -741,7 +741,7 @@ int vdi_delete(uint32_t vid)
 			uint32_t vdi_id = sd_inode_get_vid(inode, i);
 			uint64_t oid;
 
-			if (!vid)
+			if (!vdi_id)
 				continue;
 
 			oid = vid_to_data_oid(vdi_id, i);
