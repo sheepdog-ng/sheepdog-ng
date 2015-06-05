@@ -394,3 +394,32 @@ int sd_vdi_snapshot(struct sd_cluster *c, char *name, char *snap_tag)
 	return ret;
 }
 
+int sd_vdi_create(struct sd_cluster *c, char *name, uint64_t size)
+{
+	int ret;
+
+	if (size > SD_MAX_VDI_SIZE) {
+		fprintf(stderr, "VDI size is too large\n");
+		return SD_RES_INVALID_PARMS;
+	}
+
+	if (size == 0) {
+		fprintf(stderr, "VDI size must be larger than 0\n");
+		return SD_RES_INVALID_PARMS;
+	}
+
+	if (!name || *name == '\0') {
+		fprintf(stderr, "VDI name can NOT be null!\n");
+		return SD_RES_INVALID_PARMS;
+	}
+
+	uint8_t store_policy = 0;
+	if (size > SD_OLD_MAX_VDI_SIZE)
+		store_policy = 1;/** for hyper volume **/
+
+	ret = do_vdi_create(c, name, size, 0, NULL,
+			false, store_policy);
+
+	return ret;
+}
+
