@@ -23,6 +23,7 @@
 #include <stdbool.h>
 #include <linux/limits.h>
 #include <stddef.h>
+#include <stdio.h>
 
 #define SD_PROTO_VER 0x02
 
@@ -539,6 +540,52 @@ static inline uint64_t data_oid_to_ledger_oid(uint64_t oid)
 static inline uint64_t data_vid_offset(int idx)
 {
 	return offsetof(struct sd_inode, data_vdi_id[idx]);
+}
+
+static inline const char *sd_strerr(int err)
+{
+	static const char *descs[0x80] = {
+		[SD_RES_SUCCESS] = "Success",
+		[SD_RES_UNKNOWN] = "Unknown error",
+		[SD_RES_NO_OBJ] = "No object found",
+		[SD_RES_EIO] = "I/O error",
+		[SD_RES_VDI_EXIST] = "VDI exists already",
+		[SD_RES_INVALID_PARMS] = "Invalid parameters",
+		[SD_RES_SYSTEM_ERROR] = "System error",
+		[SD_RES_VDI_LOCKED] = "VDI is already locked",
+		[SD_RES_NO_VDI] = "No VDI found",
+		[SD_RES_NO_BASE_VDI] = "No base VDI found",
+		[SD_RES_VDI_READ] = "Failed to read from requested VDI",
+		[SD_RES_VDI_WRITE] = "Failed to write to requested VDI",
+		[SD_RES_BASE_VDI_READ] = "Failed to read from base VDI",
+		[SD_RES_BASE_VDI_WRITE] = "Failed to write to base VDI",
+		[SD_RES_NO_TAG] = "Failed to find requested tag",
+		[SD_RES_STARTUP] = "System is still booting",
+		[SD_RES_VDI_NOT_LOCKED] = "VDI is not locked",
+		[SD_RES_SHUTDOWN] = "System is shutting down",
+		[SD_RES_NO_MEM] = "Out of memory on server",
+		[SD_RES_FULL_VDI] = "Maximum number of VDIs reached",
+		[SD_RES_VER_MISMATCH] = "Protocol version mismatch",
+		[SD_RES_NO_SPACE] = "Server has no space for new objects",
+		[SD_RES_WAIT_FOR_FORMAT] =
+			"Waiting for cluster to be formatted",
+		[SD_RES_WAIT_FOR_JOIN] =
+			"Waiting for other nodes to join cluster",
+		[SD_RES_JOIN_FAILED] = "Node has failed to join cluster",
+		[SD_RES_HALT] =
+			"IO has halted as there are not enough living nodes",
+		[SD_RES_READONLY] = "Object is read-only",
+		[SD_RES_INODE_INVALIDATED] = "Inode object is invalidated",
+	};
+
+	if (!(0 <= err && err < sizeof(descs) / sizeof(descs[0])) \
+			|| descs[err] == NULL) {
+		static __thread char msg[32];
+		snprintf(msg, sizeof(msg), "Invalid error code %x", err);
+		return msg;
+	}
+
+	return descs[err];
 }
 
 #endif

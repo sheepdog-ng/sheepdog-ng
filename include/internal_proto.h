@@ -19,6 +19,7 @@
 
 #include <stdint.h>
 #include <netinet/in.h>
+#include <stdio.h>
 
 #include "sheepdog_proto.h"
 #include "rbtree.h"
@@ -351,5 +352,43 @@ enum shared_lock_state {
 	SHARED_LOCK_STATE_SHARED,
 	SHARED_LOCK_STATE_INVALIDATED,
 };
+
+static inline const char *sd_strerror(int err)
+{
+	/* from sheepdog_proto.h */
+	if (err >= 0 && err < 0x80)
+		return sd_strerr(err);
+
+	static const char *descs[256] = {
+		/* from internal_proto.h */
+		[SD_RES_OLD_NODE_VER] = "Request has an old epoch",
+		[SD_RES_NEW_NODE_VER] = "Request has a new epoch",
+		[SD_RES_NOT_FORMATTED] = "Cluster has not been formatted",
+		[SD_RES_INVALID_CTIME] = "Creation times differ",
+		[SD_RES_INVALID_EPOCH] = "Invalid epoch",
+		[SD_RES_NETWORK_ERROR] = "Network error between sheep",
+		[SD_RES_NO_CACHE] = "No cache object found",
+		[SD_RES_BUFFER_SMALL] = "The buffer is too small",
+		[SD_RES_FORCE_RECOVER] =
+			"Cluster is running/halted and cannot be force recovered",
+		[SD_RES_NO_STORE] = "Targeted backend store is not found",
+		[SD_RES_NO_SUPPORT] = "Operation is not supported",
+		[SD_RES_NODE_IN_RECOVERY] = "Targeted node is in recovery",
+		[SD_RES_KILLED] = "Node is killed",
+		[SD_RES_OID_EXIST] = "Object ID exists already",
+		[SD_RES_AGAIN] = "Ask to try again",
+		[SD_RES_STALE_OBJ] = "Object may be stale",
+		[SD_RES_CLUSTER_ERROR] = "Cluster driver error",
+	};
+
+	if (!(0 <= err && err < sizeof(descs) / sizeof(descs[0])) \
+			|| descs[err] == NULL) {
+		static __thread char msg[32];
+		snprintf(msg, sizeof(msg), "Invalid error code %x", err);
+		return msg;
+	}
+
+	return descs[err];
+}
 
 #endif /* __INTERNAL_PROTO_H__ */
