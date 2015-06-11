@@ -28,11 +28,10 @@ static inline bool iocb_is_aligned(const struct siocb *iocb)
 
 int prepare_iocb(uint64_t oid, const struct siocb *iocb, bool create)
 {
-	int syncflag = create ? O_SYNC : O_DSYNC;
-	int flags = syncflag | O_RDWR;
+	int flags = O_DSYNC | O_RDWR;
 
 	if (sys->nosync == true)
-		flags &= ~syncflag;
+		flags &= ~O_DSYNC;
 
 	if (sys->backend_dio && iocb_is_aligned(iocb)) {
 		if (!is_aligned_to_pagesize(iocb->buf))

@@ -254,7 +254,7 @@ int default_read(uint64_t oid, const struct siocb *iocb)
 
 int default_create_and_write(uint64_t oid, const struct siocb *iocb)
 {
-	char path[PATH_MAX], tmp_path[PATH_MAX], *dir;
+	char path[PATH_MAX], tmp_path[PATH_MAX];
 	int flags = prepare_iocb(oid, iocb, true);
 	int ret, fd;
 	uint32_t len = iocb->length;
@@ -295,6 +295,11 @@ int default_create_and_write(uint64_t oid, const struct siocb *iocb)
 		goto out;
 	}
 
+	/*
+	 * Modern FS like ext4, xfs defaults to automatic syncing of files after
+	 * replace-via-rename and replace-via-truncate operations. So rename
+	 * without fsync() is actually safe.
+	 */
 	ret = rename(tmp_path, path);
 	if (ret < 0) {
 		sd_err("failed to rename %s to %s: %m", tmp_path, path);
@@ -302,34 +307,10 @@ int default_create_and_write(uint64_t oid, const struct siocb *iocb)
 		goto out;
 	}
 
-	close(fd);
-
-	if (sys->nosync == true) {
-		objlist_cache_insert(oid);
-		return SD_RES_SUCCESS;
-	}
-
-	dir = dirname(path);
-	fd = open(dir, O_DIRECTORY | O_RDONLY);
-	if (fd < 0) {
-		sd_err("failed to open directory %s: %m", dir);
-		return err_to_sderr(path, oid, errno);
-	}
-
-	if (fsync(fd) != 0) {
-		sd_err("failed to write directory %s: %m", dir);
-		ret = err_to_sderr(path, oid, errno);
-		close(fd);
-		if (unlink(path) != 0)
-			sd_err("failed to unlink %s: %m", path);
-		return ret;
-	}
-	close(fd);
+	ret = SD_RES_SUCCESS;
 	objlist_cache_insert(oid);
-	return SD_RES_SUCCESS;
-
 out:
-	if (unlink(tmp_path) != 0)
+	if (ret != SD_RES_SUCCESS && unlink(tmp_path) != 0)
 		sd_err("failed to unlink %s: %m", tmp_path);
 	close(fd);
 	return ret;
