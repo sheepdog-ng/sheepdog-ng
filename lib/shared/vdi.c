@@ -233,7 +233,6 @@ static int write_object(struct sd_cluster *c, uint64_t oid, uint64_t cow_oid,
 	bool create, bool direct)
 {
 	struct sd_req hdr = {};
-	struct sd_rsp *rsp = (struct sd_rsp *)&hdr;
 	int ret;
 
 	if (create)
@@ -252,20 +251,14 @@ static int write_object(struct sd_cluster *c, uint64_t oid, uint64_t cow_oid,
 	hdr.obj.offset = offset;
 
 	ret = sd_run_sdreq(c, &hdr, data);
-	if (ret != SD_RES_SUCCESS)
-		return ret;
 
-	if (rsp->result != SD_RES_SUCCESS)
-		return rsp->result;
-
-	return SD_RES_SUCCESS;
+	return ret;
 }
 
 static int read_object(struct sd_cluster *c, uint64_t oid, void *data,
 		unsigned int datalen, uint64_t offset, bool direct)
 {
 	struct sd_req hdr = {};
-	struct sd_rsp *rsp = (struct sd_rsp *)&hdr;
 	int ret;
 
 	hdr.opcode = SD_OP_READ_OBJ;
@@ -276,13 +269,8 @@ static int read_object(struct sd_cluster *c, uint64_t oid, void *data,
 		hdr.flags |= SD_FLAG_CMD_DIRECT;
 
 	ret = sd_run_sdreq(c, &hdr, data);
-	if (ret != SD_RES_SUCCESS)
-		return ret;
 
-	if (rsp->result != SD_RES_SUCCESS)
-		return rsp->result;
-
-	return SD_RES_SUCCESS;
+	return ret;
 }
 
 static int find_vdi(struct sd_cluster *c, char *name,
@@ -306,10 +294,10 @@ static int find_vdi(struct sd_cluster *c, char *name,
 	if (ret != SD_RES_SUCCESS)
 		return ret;
 
-	if (rsp->result == SD_RES_SUCCESS && vid)
+	if (vid)
 		*vid = rsp->vdi.vdi_id;
 
-	return rsp->result;
+	return SD_RES_SUCCESS;
 }
 
 static int vdi_read_inode(struct sd_cluster *c, char *name,
@@ -471,7 +459,6 @@ int sd_vdi_delete(struct sd_cluster *c, char *name, char *tag)
 {
 	int ret;
 	struct sd_req hdr = {};
-	struct sd_rsp *rsp = (struct sd_rsp *)&hdr;
 	char data[SD_MAX_VDI_LEN + SD_MAX_VDI_TAG_LEN];
 	uint32_t vid;
 
@@ -499,16 +486,9 @@ int sd_vdi_delete(struct sd_cluster *c, char *name, char *tag)
 
 	ret = sd_run_sdreq(c, &hdr, data);
 
-	if (ret != SD_RES_SUCCESS) {
+	if (ret != SD_RES_SUCCESS)
 		fprintf(stderr, "Failed to delete VDI %s(tag:%s): %s\n",
 				name, tag, sd_strerr(ret));
-		return ret;
-	}
-	if (rsp->result != SD_RES_SUCCESS) {
-		ret = rsp->result;
-		fprintf(stderr, "Failed to delete VDI %s(tag:%s): %s\n",
-				name, tag, sd_strerr(ret));
-	}
 
 	return ret;
 }
