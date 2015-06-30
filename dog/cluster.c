@@ -105,7 +105,7 @@ static int cluster_format(int argc, char **argv)
 		return EXIT_FAILURE;
 	}
 
-	if (!no_vdi(vdi_inuse))
+	if (!cluster_cmd_data.force && !no_vdi(vdi_inuse))
 		confirm(FORMAT_PRINT);
 
 	gettimeofday(&tv, NULL);
@@ -716,7 +716,7 @@ failure:
 static struct subcommand cluster_cmd[] = {
 	{"info", NULL, "aprhvT", "show cluster information",
 	 NULL, CMD_NEED_NODELIST, cluster_info, cluster_options},
-	{"format", NULL, "bctaphT", "create a Sheepdog store",
+	{"format", NULL, "bctaphTf", "create a Sheepdog store",
 	 NULL, CMD_NEED_NODELIST, cluster_format, cluster_options},
 	{"shutdown", NULL, "aphT", "stop Sheepdog",
 	 NULL, 0, cluster_shutdown, cluster_options},
