@@ -1040,7 +1040,7 @@ static int do_vdi_check_exist(const struct sd_inode *inode)
 	}
 }
 
-static int do_track_object(uint64_t oid, uint8_t nr_copies)
+static int do_track_object(uint64_t oid, uint8_t nr_copies, uint8_t copy_policy)
 {
 	int i, j, ret;
 	struct sd_req hdr;
@@ -1048,13 +1048,16 @@ static int do_track_object(uint64_t oid, uint8_t nr_copies)
 	const struct sd_vnode *vnode_buf[SD_MAX_COPIES];
 	struct epoch_log *logs, *log;
 	char *next_log;
-	int nr_logs, log_length;
+	int nr_logs, log_length, data = 0, parity = 0;
 	uint32_t nodes_nr;
 
 	nodes_nr = sd_nodes_nr;
 	log_length = sd_epoch * (sizeof(struct epoch_log)
 			+ nodes_nr * sizeof(struct sd_node));
 	logs = xmalloc(log_length);
+
+	if (copy_policy != 0)
+		ec_policy_to_dp(copy_policy, &data, &parity);
 
 retry:
 	sd_init_req(&hdr, SD_OP_STAT_CLUSTER);
@@ -1085,8 +1088,14 @@ retry:
 		struct rb_root nroot = RB_ROOT;
 
 		log = (struct epoch_log *)next_log;
-		printf("\nobj %"PRIx64" locations at epoch %d, copies = %d\n",
-		       oid, log->epoch, nr_copies);
+
+		if (copy_policy == 0)
+			printf("\nobj %"PRIx64" locations at epoch %d, "
+				"copies = %d\n", oid, log->epoch, nr_copies);
+		else
+			printf("\nobj %"PRIx64" locations at epoch %d, "
+				"copies = %d:%d\n", oid, log->epoch,
+				data, parity);
 		printf("---------------------------------------------------\n");
 
 		/*
@@ -1129,7 +1138,7 @@ static int vdi_track(int argc, char **argv)
 {
 	const char *vdiname = argv[optind];
 	unsigned idx = vdi_cmd_data.index;
-	uint8_t nr_copies;
+	uint8_t nr_copies, copy_policy;
 	uint64_t oid = vdi_cmd_data.oid;
 	struct sd_inode *inode = xmalloc(sizeof(*inode));
 	uint32_t vid, vdi_id;
@@ -1143,6 +1152,7 @@ static int vdi_track(int argc, char **argv)
 		goto err;
 	}
 	vid = inode->vdi_id;
+	copy_policy = inode->copy_policy;
 	nr_copies = inode->nr_copies;
 
 	if (!oid) {
@@ -1150,7 +1160,8 @@ static int vdi_track(int argc, char **argv)
 			printf("Tracking the inode object 0x%" PRIx32
 			       " with %d nodes\n", vid, sd_nodes_nr);
 			free(inode);
-			return do_track_object(vid_to_vdi_oid(vid), nr_copies);
+			return do_track_object(vid_to_vdi_oid(vid),
+					nr_copies, copy_policy);
 		}
 
 		if (idx >= MAX_DATA_OBJS) {
@@ -1170,7 +1181,7 @@ static int vdi_track(int argc, char **argv)
 		       " with %d nodes\n", oid, vid, sd_nodes_nr);
 
 	free(inode);
-	return do_track_object(oid, nr_copies);
+	return do_track_object(oid, nr_copies, copy_policy);
 err:
 	free(inode);
 	return EXIT_FAILURE;
