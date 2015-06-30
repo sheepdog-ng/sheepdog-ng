@@ -14,19 +14,6 @@
 #include "sheepdog.h"
 #include "internal.h"
 
-static int write_object(struct sd_cluster *c, uint64_t oid, uint64_t cow_oid,
-	void *data, unsigned int datalen, uint64_t offset, uint32_t flags,
-	bool create, bool direct);
-
-static int read_object(struct sd_cluster *c, uint64_t oid, void *data,
-		unsigned int datalen, uint64_t offset, bool direct);
-
-static int vdi_read_inode(struct sd_cluster *c, char *name,
-	char *tag, struct sd_inode *inode, bool onlyheader);
-
-static int find_vdi(struct sd_cluster *c, char *name,
-					char *tag, uint32_t *vid);
-
 static int lock_vdi(struct sd_cluster *c, struct sd_vdi *vdi)
 {
 	struct sd_req hdr = {};
