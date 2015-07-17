@@ -15,7 +15,6 @@
 
 struct objlist_cache_entry {
 	uint64_t oid;
-	uint8_t ec_index;
 	struct rb_node node;
 };
 
@@ -101,13 +100,12 @@ int objlist_cache_insert(uint64_t oid)
 	return 0;
 }
 
-int objlist_migrate_cache_insert(uint64_t oid, uint8_t ec_index)
+int objlist_migrate_cache_insert(uint64_t oid)
 {
 	struct objlist_cache_entry *entry, *p;
 
 	entry = xmalloc(sizeof(*entry));
 	entry->oid = oid;
-	entry->ec_index = ec_index;
 	rb_init_node(&entry->node);
 
 	sd_write_lock(&migrate_cache.lock);
@@ -145,14 +143,23 @@ int objlist_migrate_cache_insert(uint64_t oid, uint8_t ec_index)
 void objlist_migrate_cache_retire(void)
 {
 	struct objlist_cache_entry *entry;
+	struct vnode_info *vinfo = get_vnode_info();
 
 	rb_for_each_entry(entry, &migrate_cache.root, node) {
+		uint64_t oid = entry->oid;
 		/* For some reason, oid gets back during multiple node events */
-		if (sd_store->exist(entry->oid, entry->ec_index))
-			continue;
-		sd_debug("%"PRIx64, entry->oid);
-		objlist_cache_remove(entry->oid);
+		if (is_erasure_oid(oid)) {
+			uint8_t idx = local_ec_index(vinfo, oid);
+			if (idx != SD_MAX_COPIES)
+				continue;
+		} else {
+			if (sd_store->exist(oid, SD_MAX_COPIES))
+				continue;
+		}
+		sd_debug("%"PRIx64, oid);
+		objlist_cache_remove(oid);
 	}
+	put_vnode_info(vinfo);
 	rb_destroy(&migrate_cache.root, struct objlist_cache_entry, node);
 }
 

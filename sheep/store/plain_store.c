@@ -401,7 +401,7 @@ static int move_object_to_stale_dir(uint64_t oid, const char *wd,
 		return SD_RES_EIO;
 	}
 
-	objlist_migrate_cache_insert(oid, ec_index);
+	objlist_migrate_cache_insert(oid);
 
 	sd_debug("moved object %"PRIx64, oid);
 	return SD_RES_SUCCESS;
