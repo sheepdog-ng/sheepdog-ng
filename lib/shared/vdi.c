@@ -17,19 +17,14 @@
 static int lock_vdi(struct sd_cluster *c, struct sd_vdi *vdi)
 {
 	struct sd_req hdr = {};
-	struct sd_rsp *rsp = (struct sd_rsp *)&hdr;
 	int ret;
 
 	hdr.opcode = SD_OP_LOCK_VDI;
 	hdr.data_length = SD_MAX_VDI_LEN;
 	hdr.flags = SD_FLAG_CMD_WRITE;
 	ret = sd_run_sdreq(c, &hdr, vdi->name);
-	if (ret != SD_RES_SUCCESS)
-		return ret;
 
-	vdi->vid = rsp->vdi.vdi_id;
-
-	return SD_RES_SUCCESS;
+	return ret;
 }
 
 static int unlock_vdi(struct sd_cluster *c, struct sd_vdi *vdi)
@@ -65,36 +60,102 @@ static void free_vdi(struct sd_vdi *vdi)
 	free(vdi);
 }
 
-struct sd_vdi *sd_vdi_open(struct sd_cluster *c, char *name)
+static int find_vdi(struct sd_cluster *c, char *name,
+					char *tag, uint32_t *vid)
 {
 	struct sd_req hdr = {};
-	struct sd_vdi *new = alloc_vdi(c, name);
+	struct sd_rsp *rsp = (struct sd_rsp *)&hdr;
+	char buf[SD_MAX_VDI_LEN + SD_MAX_VDI_TAG_LEN];
 	int ret;
 
-	ret = lock_vdi(c, new);
+	memset(buf, 0, sizeof(buf));
+	pstrcpy(buf, SD_MAX_VDI_LEN, name);
+	if (tag)
+		pstrcpy(buf + SD_MAX_VDI_LEN, SD_MAX_VDI_TAG_LEN, tag);
+
+	hdr.opcode = SD_OP_GET_VDI_INFO;
+	hdr.data_length = SD_MAX_VDI_LEN + SD_MAX_VDI_TAG_LEN;
+	hdr.flags = SD_FLAG_CMD_WRITE;
+
+	ret = sd_run_sdreq(c, &hdr, buf);
+	if (ret != SD_RES_SUCCESS)
+		return ret;
+
+	if (vid)
+		*vid = rsp->vdi.vdi_id;
+
+	return SD_RES_SUCCESS;
+}
+
+static int read_object(struct sd_cluster *c, uint64_t oid, void *data,
+		unsigned int datalen, uint64_t offset, bool direct)
+{
+	struct sd_req hdr = {};
+	int ret;
+
+	hdr.opcode = SD_OP_READ_OBJ;
+	hdr.data_length = datalen;
+	hdr.obj.oid = oid;
+	hdr.obj.offset = offset;
+	if (direct)
+		hdr.flags |= SD_FLAG_CMD_DIRECT;
+
+	ret = sd_run_sdreq(c, &hdr, data);
+
+	return ret;
+}
+
+static int vdi_read_inode(struct sd_cluster *c, char *name,
+	char *tag, struct sd_inode *inode, bool onlyheader)
+{
+	int ret;
+	uint32_t vid;
+	size_t len;
+
+	ret = find_vdi(c, name, tag, &vid);
+	if (ret != SD_RES_SUCCESS)
+		return ret;
+
+	if (onlyheader)
+		len = SD_INODE_HEADER_SIZE;
+	else
+		len = SD_INODE_SIZE;
+
+	ret = read_object(c, vid_to_vdi_oid(vid), inode, len, 0, true);
+
+	return ret;
+}
+
+struct sd_vdi *sd_vdi_open(struct sd_cluster *c, char *name, char *tag)
+{
+	struct sd_vdi *new = NULL;
+	int ret;
+
+	if (name == NULL || *name == '\0') {
+		fprintf(stderr, "VDI name can NOT be null!\n");
+		errno = SD_RES_INVALID_PARMS;
+		goto out_free;
+	}
+
+	new = alloc_vdi(c, name);
+
+	ret = vdi_read_inode(c, name, tag, new->inode, false);
 	if (ret != SD_RES_SUCCESS) {
 		errno = ret;
 		goto out_free;
 	}
+	new->vid = new->inode->vdi_id;
 
-	hdr.opcode = SD_OP_READ_OBJ;
-	hdr.data_length = SD_INODE_SIZE;
-	hdr.obj.oid = vid_to_vdi_oid(new->vid);
-	hdr.obj.offset = 0;
-	ret = sd_run_sdreq(c, &hdr, new->inode);
-	if (ret != SD_RES_SUCCESS) {
-		errno = ret;
-		goto out_unlock;
-	}
-
-	if (vdi_is_snapshot(new->inode)) {
-		errno = SD_RES_INVALID_PARMS;
-		goto out_unlock;
+	if (!vdi_is_snapshot(new->inode)) {
+		ret = lock_vdi(c, new);
+		if (ret != SD_RES_SUCCESS) {
+			errno = ret;
+			goto out_free;
+		}
 	}
 
 	return new;
-out_unlock:
-	unlock_vdi(c, new);
+
 out_free:
 	free_vdi(new);
 	return NULL;
@@ -163,10 +224,15 @@ int sd_vdi_read(struct sd_cluster *c, struct sd_vdi *vdi,
 int sd_vdi_write(struct sd_cluster *c, struct sd_vdi *vdi, void *buf,
 			size_t count, off_t offset)
 {
-	struct sd_request *req = alloc_request(c, buf,
-					count, VDI_WRITE);
+	struct sd_request *req = NULL;
 	int ret;
 
+	if (vdi_is_snapshot(vdi->inode)) {
+		fprintf(stderr, "Snapshot is READ-ONLY!\n");
+		return SD_RES_INVALID_PARMS;
+	}
+
+	req = alloc_request(c, buf, count, VDI_WRITE);
 	if (!req)
 		return errno;
 
@@ -244,72 +310,6 @@ static int write_object(struct sd_cluster *c, uint64_t oid, uint64_t cow_oid,
 	hdr.obj.offset = offset;
 
 	ret = sd_run_sdreq(c, &hdr, data);
-
-	return ret;
-}
-
-static int read_object(struct sd_cluster *c, uint64_t oid, void *data,
-		unsigned int datalen, uint64_t offset, bool direct)
-{
-	struct sd_req hdr = {};
-	int ret;
-
-	hdr.opcode = SD_OP_READ_OBJ;
-	hdr.data_length = datalen;
-	hdr.obj.oid = oid;
-	hdr.obj.offset = offset;
-	if (direct)
-		hdr.flags |= SD_FLAG_CMD_DIRECT;
-
-	ret = sd_run_sdreq(c, &hdr, data);
-
-	return ret;
-}
-
-static int find_vdi(struct sd_cluster *c, char *name,
-					char *tag, uint32_t *vid)
-{
-	struct sd_req hdr = {};
-	struct sd_rsp *rsp = (struct sd_rsp *)&hdr;
-	char buf[SD_MAX_VDI_LEN + SD_MAX_VDI_TAG_LEN];
-	int ret;
-
-	memset(buf, 0, sizeof(buf));
-	pstrcpy(buf, SD_MAX_VDI_LEN, name);
-	if (tag)
-		pstrcpy(buf + SD_MAX_VDI_LEN, SD_MAX_VDI_TAG_LEN, tag);
-
-	hdr.opcode = SD_OP_GET_VDI_INFO;
-	hdr.data_length = SD_MAX_VDI_LEN + SD_MAX_VDI_TAG_LEN;
-	hdr.flags = SD_FLAG_CMD_WRITE;
-
-	ret = sd_run_sdreq(c, &hdr, buf);
-	if (ret != SD_RES_SUCCESS)
-		return ret;
-
-	if (vid)
-		*vid = rsp->vdi.vdi_id;
-
-	return SD_RES_SUCCESS;
-}
-
-static int vdi_read_inode(struct sd_cluster *c, char *name,
-	char *tag, struct sd_inode *inode, bool onlyheader)
-{
-	int ret;
-	uint32_t vid;
-	size_t len;
-
-	ret = find_vdi(c, name, tag, &vid);
-	if (ret != SD_RES_SUCCESS)
-		return ret;
-
-	if (onlyheader)
-		len = SD_INODE_HEADER_SIZE;
-	else
-		len = SD_INODE_SIZE;
-
-	ret = read_object(c, vid_to_vdi_oid(vid), inode, len, 0, true);
 
 	return ret;
 }

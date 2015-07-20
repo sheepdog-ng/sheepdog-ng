@@ -86,11 +86,13 @@ int sd_run_sdreq(struct sd_cluster *c, struct sd_req *hdr, void *data);
  *
  * @c: pointer to the cluster descriptor.
  * @name: the name of the vdi to be opened.
+ * @tag: snapshot tag of the vdi to be opened.
  *
+ * If the vdi is not snapshot, set tag to NULL.
  * Return a vdi descriptor on success. Otherwise, return NULL in case of
  * error and set errno as error code defined in sheepdog_proto.h.
  */
-struct sd_vdi *sd_vdi_open(struct sd_cluster *c, char *name);
+struct sd_vdi *sd_vdi_open(struct sd_cluster *c, char *name, char *tag);
 
 /*
  * Read from a vdi descriptor at a given offset.
