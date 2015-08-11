@@ -21,7 +21,7 @@ AM_CFLAGS		=
 
 AM_CPPFLAGS		= -I$(top_builddir)/include -I$(top_srcdir)/include
 
-sbin_PROGRAMS		= dog
+bin_PROGRAMS		= dog
 
 dog_SOURCES		= farm/object_tree.c farm/sha1_file.c farm/snap.c \
 			  farm/trunk.c farm/farm.c farm/slice.c \
@@ -44,10 +44,10 @@ noinst_HEADERS		= treeview.h dog.h farm/farm.h
 EXTRA_DIST		=
 
 install-exec-hook:
-	if [ -z "${DESTDIR}" ];then $(LN_S) -f ${sbindir}/dog ${sbindir}/collie;fi
+	if [ -z "${DESTDIR}" ];then $(LN_S) -f ${bindir}/dog ${bindir}/collie;fi
 
 uninstall-hook:
-	rm -f ${sbindir}/collie
+	rm -f ${sbindir}/collie ${sbindir}/dog
 
 all-local:
 	@echo Built dog
