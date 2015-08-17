@@ -19,6 +19,7 @@
 #include <sys/socket.h>
 #include <netinet/tcp.h>
 #include <pthread.h>
+#include <signal.h>
 
 int sheep_submit_sdreq(struct sd_cluster *c, struct sd_req *hdr,
 			      void *data, uint32_t wlen)
@@ -460,6 +461,9 @@ struct sd_cluster *sd_connect(char *host)
 		errno = -ret;
 		goto err_close;
 	};
+
+	signal(SIGPIPE, SIG_IGN);
+
 	INIT_LIST_HEAD(&c->request_list);
 	INIT_LIST_HEAD(&c->inflight_list);
 	INIT_LIST_HEAD(&c->blocking_list);
