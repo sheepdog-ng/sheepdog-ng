@@ -310,7 +310,7 @@ static int sheep_handle_reply(struct sd_cluster *c)
 		return 0;
 
 	if (rsp.data_length > 0) {
-		ret = xread(c->sockfd, req->buf, req->length);
+		ret = xread(c->sockfd, req->buf, rsp.data_length);
 		if (ret < 0) {
 			req->aiocb->ret = SD_RES_EIO;
 			goto end_request;
