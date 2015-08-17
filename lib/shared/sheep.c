@@ -13,6 +13,7 @@
 
 #include "sheepdog.h"
 #include "internal.h"
+#include "internal_proto.h"
 
 #include <unistd.h>
 #include <sys/types.h>
@@ -286,6 +287,46 @@ int end_sheep_request(struct sheep_request *req)
 	return 0;
 }
 
+static int connect_to(char *ip, unsigned int port)
+{
+	int fd, ret, value = 1;
+	struct sockaddr_in addr;
+	struct linger linger_opt = {1, 0};
+
+	addr.sin_family = AF_INET;
+	addr.sin_port = htons(port);
+
+	if (inet_pton(AF_INET, ip, &addr.sin_addr) != 1) {
+		ret = -1;
+		goto err;
+	}
+
+	fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+	if (fd < 0) {
+		ret = -1;
+		goto err;
+	}
+
+	ret = setsockopt(fd, SOL_SOCKET, SO_LINGER, &linger_opt,
+			 sizeof(linger_opt));
+	if (ret < 0)
+		goto err_close;
+
+	ret = setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &value, sizeof(value));
+	if (ret < 0)
+		goto err_close;
+
+	ret = connect(fd, (struct sockaddr *)&addr, sizeof(addr));
+	if (ret < 0)
+		goto err_close;
+
+	return fd;
+
+err_close:
+	close(fd);
+err:
+	return ret;
+}
 
 /* FIXME: add auto-reconnect support */
 static int sheep_handle_reply(struct sd_cluster *c)
@@ -389,14 +430,53 @@ static int init_cluster_handlers(struct sd_cluster *c)
 	return SD_RES_SUCCESS;
 }
 
+static int get_all_nodes(struct sd_cluster *c)
+{
+	struct sd_node *nodes = NULL;
+	struct sd_req hdr = {};
+	struct sd_rsp *rsp = (struct sd_rsp *)&hdr;
+	unsigned int nodes_size;
+	int ret;
+
+	nodes_size = SD_MAX_NODES * sizeof(struct sd_node);
+	nodes = xzalloc(nodes_size);
+
+	hdr.opcode = SD_OP_GET_NODE_LIST;
+	hdr.proto_ver = SD_SHEEP_PROTO_VER;
+	hdr.data_length = nodes_size;
+
+	ret = sd_run_sdreq(c, &hdr, nodes);
+	if (ret != SD_RES_SUCCESS) {
+		free(nodes);
+		return ret;
+	}
+
+	int nr_nodes = rsp->data_length / sizeof(struct sd_node);
+
+	c->hosts = xzalloc(nr_nodes * sizeof(struct sheep_host));
+	c->nr_hosts = nr_nodes;
+	c->host_index = 0;
+
+	for (int i = 0; i < nr_nodes; i++) {
+		struct sheep_host *p = c->hosts + i;
+		p->port = nodes[i].nid.port;
+		if (!inet_ntop(AF_INET, nodes[i].nid.addr + 12,
+			p->addr, INET_ADDRSTRLEN)) {
+			ret = SD_RES_SYSTEM_ERROR;
+			break;
+		}
+	}
+
+	free(nodes);
+	return ret;
+}
+
 struct sd_cluster *sd_connect(char *host)
 {
 	char *ip, *pt, *h = xstrdup(host);
 	unsigned port;
-	struct sockaddr_in addr;
-	struct linger linger_opt = {1, 0};
-	int fd, ret, value = 1;
-	struct sd_cluster *c;
+	int fd, ret;
+	struct sd_cluster *c = NULL;
 
 	ip = strtok(h, ":");
 	if (!ip) {
@@ -415,49 +495,17 @@ struct sd_cluster *sd_connect(char *host)
 		goto err;
 	}
 
-	fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+	fd = connect_to(ip, port);
 	if (fd < 0) {
 		errno = SD_RES_SYSTEM_ERROR;
 		goto err;
 	}
 
-	ret = setsockopt(fd, SOL_SOCKET, SO_LINGER, &linger_opt,
-			 sizeof(linger_opt));
-	if (ret < 0) {
-		errno = SD_RES_SYSTEM_ERROR;
-		goto err_close;
-	}
-
-	ret = setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &value, sizeof(value));
-	if (ret < 0) {
-		errno = SD_RES_SYSTEM_ERROR;
-		goto err_close;
-	}
-
-	addr.sin_family = AF_INET;
-	addr.sin_port = htons(port);
-	ret = inet_pton(AF_INET, ip, &addr.sin_addr);
-	switch (ret) {
-	case 1:
-		break;
-	default:
-		errno = SD_RES_INVALID_PARMS;
-		goto err_close;
-	}
-
-	ret = connect(fd, (struct sockaddr *)&addr, sizeof(addr));
-	if (ret < 0) {
-		errno = SD_RES_SYSTEM_ERROR;
-		goto err_close;
-	}
-
 	c = xzalloc(sizeof(*c));
 	c->sockfd = fd;
-	c->port = port;
-	memcpy(c->addr, &addr.sin_addr, INET_ADDRSTRLEN);
+
 	ret = init_cluster_handlers(c);
 	if (ret < 0) {
-		free(c);
 		errno = -ret;
 		goto err_close;
 	};
@@ -472,10 +520,19 @@ struct sd_cluster *sd_connect(char *host)
 	sd_init_rw_lock(&c->blocking_lock);
 	sd_init_mutex(&c->submit_mutex);
 
+	ret = get_all_nodes(c);
+	if (ret != SD_RES_SUCCESS) {
+		errno = ret;
+		goto err_close;
+	}
+
 	free(h);
 	return c;
+
 err_close:
 	close(fd);
+	free(c->hosts);
+	free(c);
 err:
 	free(h);
 	return NULL;
@@ -496,6 +553,7 @@ int sd_disconnect(struct sd_cluster *c)
 	close(c->request_fd);
 	close(c->reply_fd);
 	close(c->sockfd);
+	free(c->hosts);
 	free(c);
 
 	return SD_RES_SUCCESS;

@@ -27,8 +27,12 @@
 
 struct sd_cluster {
 	int sockfd;
-	uint8_t addr[INET_ADDRSTRLEN];
-	unsigned int port;
+	struct sheep_host {
+		char addr[INET_ADDRSTRLEN];
+		unsigned int port;
+	} *hosts;
+	unsigned int nr_hosts;
+	unsigned int host_index;
 	uint32_t seq_num;
 	pthread_t request_thread;
 	pthread_t reply_thread;
