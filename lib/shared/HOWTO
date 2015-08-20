@@ -1,0 +1,109 @@
+This is a python wrapper of libsheepdog.so, it provide pure python API for sheepdog user.
+
+Function prototype:
+
+class sheepdog.sheepdog_driver(connection)
+    @connection: a connection to the sheepdog server.
+    :the instance of this class will be returned by connect() method, user don't need to instantiate it directly.
+
+sheepdog_driver.disconnect()
+    Disconnect to the sheepdog cluster.
+
+sheepdog_driver.create(name, size)
+    Create a logic volume in the sheepdog cluster:
+    @name: the name of the volume to be created.
+    @size: the size(Byte) of the volume to be created.
+
+sheepdog_driver.delete(name, tag)
+    Delete a logic volume in the sheepdog cluster:
+    @name: the name of the volume to be deleted
+    @tag: the snapshot tag of the volume, to delete a volume(not a snapshot), set tag to NULL. A volume
+          can have many snapshots, the tag is used to identify the different snapshot.
+
+sheepdog_driver.open(name, tag)
+    Open the named volume:
+    @name: the name of the volume to be opened.
+    @tag: snapshot tag of the volume to be opened, if the volume is not snapshot, set tag to NULL.
+    :returns: the volume descriptor.
+
+sheepdog_driver.close(vd)
+    Close a volume that the volume descriptor point to.
+    @vd: the volume descriptor.
+
+sheepdog_driver.read(vd, size, offset)
+    Read from a volume at a given offset:
+    @vd: the volume descritor.
+    @size: how many bytes we want to read.
+    @offset: the start of the volume we try to read.
+    :returns: the read data.
+
+sheepdog_driver.write(vd, data, size, offset)
+    Write data to a volume at a given offset.
+    @vd: the volume descritor.
+    @size: how many bytes we want to write.
+    @offset: the start of the volume we try to write.
+    @data: the data to be write.
+
+sheepdog_driver.snapshot(name, tag)
+    Take a snapshot of a volume.
+    @name: the name of the volume to snapshot
+    @tag: the tag of the snapshot
+
+sheepdog_driver.clone(srcname, srctag, dstname)
+    Clone a new volume from a snapshot.
+    @srcname: the source volume name.
+    @srctag: the source tag of the snapshot.
+    @dstname: the destination volume name.
+    Note:only snapshot can be cloned.
+
+sheepdog.connect(server_host='127.0.0.1:7000')
+    Connect to the Sheepdog cluster.
+    @server_host: the sheepdog server, a combination of ip and port , default value is '127.0.0.1:7000'.
+    :returns: an object of sheepdog_driver.
+    :a SheepdogException will be raised if connect failed.
+
+
+Basic use:
+
+    import the module and establish a connection to the sheepdog cluster:
+    >>> import sheepdog
+    >>> test_driver = sheepdog.connect()
+
+    create a volume named 'test_volume', size 1000000000 bytes, then delete it:
+    >>> test_driver.create('test_volume', 1000000000)
+    >>> test_driver.delete('test_volume',None)
+
+    write a string to the volume and readout
+    >>> test_driver.create('test_volume', 1000000000)
+    >>> test_vd = test_driver.open('test_volume', None)
+    >>> test_driver.write(test_vd, '1234567890', 10, 0)
+    >>> test_str = test_driver.read(test_vd, 10, 0)
+    >>> test_str
+    '1234567890'
+    >>> test_driver.close(test_vd)
+    do not forget to close the volume descriptor after reading and writing.
+
+    create a snapshot to the 'test_volume', and specify a tag 'test_tag' to the new snapshot:
+    >>> test_driver.snapshot('test_volume','test_tag')
+
+    clone a new volume from 'test_volume'
+    >>> test_driver.clone('test_volume',None,'test_clone')
+    Only snapshot VDIs can be cloned, please specify snapshot tag
+    Traceback (most recent call last):
+    File "<stdin>", line 1, in <module>
+    File "python_wrapper.py", line 193, in clone
+        err_handle(err_code)
+    File "python_wrapper.py", line 47, in err_handle
+        raise SheepdogException(errlist[errcode])
+    sheepdog.SheepdogException: Invalid parameters
+    we get a exception, because only snapshot can be cloned. now we clone a new volume from the
+    snapshot created before, which has a tag 'test_tag'; give a name 'test_clone' to the new volume:
+    >>> test_driver.clone('test_volume','test_tag','test_clone')
+
+    delete the volume 'test_volume','test_clone',and the snapshot of the 'test_volume':
+    >>> test_driver.delete('test_clone',None)
+    >>> test_driver.delete('test_volume','test_tag')
+    >>> test_driver.delete('test_volume',None)
+
+    do not forget to close the connection to the sheepdog cluster:
+    >>> test_driver.disconnect()
