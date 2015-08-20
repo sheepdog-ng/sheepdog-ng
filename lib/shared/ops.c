@@ -153,21 +153,10 @@ static int sheep_ctl_request(struct sheep_aiocb *aiocb)
 	request->seq_num = uatomic_add_return(&c->seq_num, 1);
 	request->opcode = SHEEP_CTL;
 	hdr->id = request->seq_num;
-
-	sd_write_lock(&c->inflight_lock);
-	list_add_tail(&request->list, &c->inflight_list);
-	sd_rw_unlock(&c->inflight_lock);
-
-	uint32_t wlen = 0;
-
-	if (hdr->flags & SD_FLAG_CMD_WRITE)
-		wlen = hdr->data_length;
-
 	uatomic_inc(&aiocb->nr_requests);
-	int ret = sheep_submit_sdreq(c, hdr, aiocb->buf, wlen);
-	eventfd_xwrite(c->reply_fd, 1);
 
-	return ret;
+	submit_sheep_request(request);
+	return SD_RES_SUCCESS;
 }
 
 static int sheep_ctl_response(struct sheep_request *req, struct sd_rsp *rsp)

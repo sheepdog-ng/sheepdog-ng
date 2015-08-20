@@ -22,22 +22,86 @@
 #include <pthread.h>
 #include <signal.h>
 
+static ssize_t net_read(int fd, void *buf, size_t count)
+{
+	char *p = buf;
+	ssize_t sum = 0;
+	while (count != 0) {
+		ssize_t loaded = 0;
+		while (true) {
+			loaded = read(fd, p, count);
+			if (unlikely(loaded < 0) && (errno == EINTR))
+				continue;
+			break;
+		}
+
+		if (unlikely(loaded < 0))
+			return -1;
+		if (unlikely(loaded == 0))
+			return sum;
+
+		count -= loaded;
+		p += loaded;
+		sum += loaded;
+	}
+
+	return sum;
+}
+
+static ssize_t net_write(int fd, void *buf, size_t count)
+{
+	char *p = buf;
+	ssize_t sum = 0;
+	while (count != 0) {
+		ssize_t written = 0;
+		while (true) {
+			written = write(fd, p, count);
+			if (unlikely(written < 0) && (errno == EINTR))
+				continue;
+			break;
+		}
+
+		if (unlikely(written < 0))
+			return -1;
+		if (unlikely(written == 0))
+			return -1;
+
+		count -= written;
+		p += written;
+		sum += written;
+	}
+
+	return sum;
+}
+
 int sheep_submit_sdreq(struct sd_cluster *c, struct sd_req *hdr,
 			      void *data, uint32_t wlen)
 {
 	int ret;
 
 	sd_mutex_lock(&c->submit_mutex);
-	ret = xwrite(c->sockfd, hdr, sizeof(*hdr));
-	if (ret < 0)
+	if (!uatomic_is_true(&c->connected)) {
+		ret = -SD_RES_EIO;
 		goto out;
+	}
 
-	if (wlen)
-		ret = xwrite(c->sockfd, data, wlen);
+	ret = net_write(c->sockfd, hdr, sizeof(*hdr));
+	if (ret != sizeof(*hdr)) {
+		ret = -SD_RES_EIO;
+		goto out;
+	}
+
+	if (wlen) {
+		ret = net_write(c->sockfd, data, wlen);
+		if (ret != wlen)
+			ret = -SD_RES_EIO;
+	}
+
 out:
+	if (ret < 0)
+		uatomic_set_false(&c->connected);
+
 	sd_mutex_unlock(&c->submit_mutex);
-	if (unlikely(ret < 0))
-		return -SD_RES_EIO;
 
 	return ret;
 }
@@ -124,21 +188,97 @@ uint32_t sheep_inode_get_vid(struct sd_request *req, uint32_t idx)
 	return vid;
 }
 
-int submit_sheep_request(struct sheep_request *req)
+static int connect_to(char *ip, unsigned int port)
 {
-	struct sd_req hdr = {};
+	int fd, ret, value = 1;
+	struct sockaddr_in addr;
+	struct linger linger_opt = {1, 0};
+	struct timeval to_send = {NET_SEND_TIMEOUT, 0},
+			to_recv = {NET_RECV_TIMEOUT, 0};
+
+	addr.sin_family = AF_INET;
+	addr.sin_port = htons(port);
+
+	if (inet_pton(AF_INET, ip, &addr.sin_addr) != 1) {
+		ret = -1;
+		goto err;
+	}
+
+	fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+	if (fd < 0) {
+		ret = -1;
+		goto err;
+	}
+
+	ret = setsockopt(fd, SOL_SOCKET, SO_LINGER, &linger_opt,
+			 sizeof(linger_opt));
+	if (ret < 0)
+		goto err_close;
+
+	ret = setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &value, sizeof(value));
+	if (ret < 0)
+		goto err_close;
+
+	ret = connect(fd, (struct sockaddr *)&addr, sizeof(addr));
+	if (ret < 0)
+		goto err_close;
+
+	ret = setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &to_recv,
+			sizeof(to_recv));
+	if (ret < 0)
+		goto err_close;
+
+	ret = setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &to_send,
+			sizeof(to_send));
+	if (ret < 0)
+		goto err_close;
+
+	fprintf(stderr, "Now connected to %s:%d (fd:%d)\n", ip, port, fd);
+	return fd;
+
+err_close:
+	close(fd);
+err:
+	return ret;
+}
+
+static void do_reconnect(struct sd_cluster *c)
+{
+	struct sheep_host *p = NULL;
+	int fd = -1, retry;
+
+	sd_mutex_lock(&c->submit_mutex);
+	close(c->sockfd);
+	while (fd < 0) {
+		retry = c->nr_hosts;
+		while (retry--) {
+			p = c->hosts + c->host_index;
+			fprintf(stderr, "\nReconnecting to %s:%d...\n",
+					p->addr, p->port);
+			fd = connect_to(p->addr, p->port);
+			c->host_index = (c->host_index + 1) % c->nr_hosts;
+			if (fd > 0)
+				break;
+		}
+	}
+
+	c->sockfd = fd;
+	uatomic_set_true(&c->connected);
+	sd_mutex_unlock(&c->submit_mutex);
+}
+
+static int do_submit_sheep_request(struct sheep_request *req)
+{
+	struct sd_req hdr = {}, *hdr_ptr = NULL;
 	struct sd_cluster *c = req->aiocb->request->cluster;
 	int ret = 0;
+	uint32_t wlen = 0;
 
 	hdr.id = req->seq_num;
 	hdr.data_length = req->length;
 	hdr.obj.oid = req->oid;
 	hdr.obj.cow_oid = req->cow_oid;
 	hdr.obj.offset = req->offset;
-
-	sd_write_lock(&c->inflight_lock);
-	list_add_tail(&req->list, &c->inflight_list);
-	sd_rw_unlock(&c->inflight_lock);
 
 	switch (req->opcode) {
 	case VDI_CREATE:
@@ -151,18 +291,56 @@ int submit_sheep_request(struct sheep_request *req)
 		if (req->cow_oid)
 			hdr.flags |= SD_FLAG_CMD_COW;
 		ret = sheep_submit_sdreq(c, &hdr, req->buf, req->length);
-		if (ret < 0)
-			goto err;
 		break;
 	case VDI_READ:
 		hdr.opcode = SD_OP_READ_OBJ;
 		ret = sheep_submit_sdreq(c, &hdr, NULL, 0);
-		if (ret < 0)
-			goto err;
+		break;
+	case SHEEP_CTL:
+		hdr_ptr = req->aiocb->request->hdr;
+		if (hdr_ptr->flags & SD_FLAG_CMD_WRITE)
+			wlen = hdr_ptr->data_length;
+		ret = sheep_submit_sdreq(c, hdr_ptr, req->buf, wlen);
 		break;
 	}
-err:
+
+	return ret;
+}
+
+static void reconnect_and_resend(struct sd_cluster *c)
+{
+	struct sheep_request *request;
+	int ret;
+again:
+	do_reconnect(c);
+
+	sd_read_lock(&c->inflight_lock);
+
+	list_for_each_entry(request, &c->inflight_list, list) {
+		ret = do_submit_sheep_request(request);
+		if (ret > 0) {
+			eventfd_xwrite(c->reply_fd, 1);
+		} else {
+			sd_rw_unlock(&c->inflight_lock);
+			goto again;
+		}
+	}
+
+	sd_rw_unlock(&c->inflight_lock);
+}
+
+int submit_sheep_request(struct sheep_request *req)
+{
+	int ret;
+	struct sd_cluster *c = req->aiocb->request->cluster;
+
+	sd_write_lock(&c->inflight_lock);
+	list_add_tail(&req->list, &c->inflight_list);
+	sd_rw_unlock(&c->inflight_lock);
+
+	ret = do_submit_sheep_request(req);
 	eventfd_xwrite(c->reply_fd, 1);
+
 	return ret;
 }
 
@@ -241,33 +419,15 @@ static void *request_handler(void *data)
 	pthread_exit(NULL);
 }
 
-static struct sheep_request *fetch_first_inflight_request(struct sd_cluster *c)
-{
-	struct sheep_request *req;
-
-	sd_write_lock(&c->inflight_lock);
-	if (!list_empty(&c->inflight_list)) {
-		req = list_first_entry(&c->inflight_list, struct sheep_request,
-				       list);
-		list_del(&req->list);
-	} else {
-		req = NULL;
-	}
-	sd_rw_unlock(&c->inflight_lock);
-	return req;
-}
-
-static struct sheep_request *fetch_inflight_request(struct sd_cluster *c,
+static struct sheep_request *find_inflight_request(struct sd_cluster *c,
 						    uint32_t seq_num)
 {
 	struct sheep_request *req;
 
-	sd_write_lock(&c->inflight_lock);
+	sd_read_lock(&c->inflight_lock);
 	list_for_each_entry(req, &c->inflight_list, list) {
-		if (req->seq_num == seq_num) {
-			list_del(&req->list);
+		if (req->seq_num == seq_num)
 			goto out;
-		}
 	}
 	req = NULL;
 out:
@@ -287,86 +447,59 @@ int end_sheep_request(struct sheep_request *req)
 	return 0;
 }
 
-static int connect_to(char *ip, unsigned int port)
-{
-	int fd, ret, value = 1;
-	struct sockaddr_in addr;
-	struct linger linger_opt = {1, 0};
-
-	addr.sin_family = AF_INET;
-	addr.sin_port = htons(port);
-
-	if (inet_pton(AF_INET, ip, &addr.sin_addr) != 1) {
-		ret = -1;
-		goto err;
-	}
-
-	fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-	if (fd < 0) {
-		ret = -1;
-		goto err;
-	}
-
-	ret = setsockopt(fd, SOL_SOCKET, SO_LINGER, &linger_opt,
-			 sizeof(linger_opt));
-	if (ret < 0)
-		goto err_close;
-
-	ret = setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &value, sizeof(value));
-	if (ret < 0)
-		goto err_close;
-
-	ret = connect(fd, (struct sockaddr *)&addr, sizeof(addr));
-	if (ret < 0)
-		goto err_close;
-
-	return fd;
-
-err_close:
-	close(fd);
-err:
-	return ret;
-}
-
-/* FIXME: add auto-reconnect support */
 static int sheep_handle_reply(struct sd_cluster *c)
 {
 	struct sd_rsp rsp = {};
 	struct sheep_request *req;
 	struct sheep_aiocb *aiocb;
 	int ret;
+	char *temp;
 
-	ret = xread(c->sockfd, (char *)&rsp, sizeof(rsp));
-	if (ret < 0) {
-		req = fetch_first_inflight_request(c);
-		if (req != NULL) {
-			req->aiocb->ret = SD_RES_EIO;
-			goto end_request;
-		}
+	if (unlikely(!uatomic_is_true(&c->connected)))
+		goto reconnect;
+
+	ret = net_read(c->sockfd, (char *)&rsp, sizeof(rsp));
+	if (ret != sizeof(rsp))
 		goto err;
-	}
 
-	req = fetch_inflight_request(c, rsp.id);
+	req = find_inflight_request(c, rsp.id);
 	if (!req)
-		return 0;
+		/*
+		 * Some request might be sent more than once because of
+		 * reconnection, we just discard the duplicated one.
+		 */
+		goto discard;
 
 	if (rsp.data_length > 0) {
-		ret = xread(c->sockfd, req->buf, rsp.data_length);
-		if (ret < 0) {
-			req->aiocb->ret = SD_RES_EIO;
-			goto end_request;
-		}
+		ret = net_read(c->sockfd, req->buf, rsp.data_length);
+		if (ret != rsp.data_length)
+			goto err;
 	}
+
+	sd_write_lock(&c->inflight_lock);
+	list_del(&req->list);
+	sd_rw_unlock(&c->inflight_lock);
 
 	aiocb = req->aiocb;
 	aiocb->op = get_sd_op(req->opcode);
 	if (aiocb->op != NULL && !!aiocb->op->response_process)
 		ret = aiocb->op->response_process(req, &rsp);
 
-end_request:
 	end_sheep_request(req);
-err:
+
 	return ret;
+err:
+	uatomic_set_false(&c->connected);
+reconnect:
+	reconnect_and_resend(c);
+	return -1;
+discard:
+	if (rsp.data_length == 0)
+		return 0;
+	temp = xmalloc(rsp.data_length);
+	net_read(c->sockfd, temp, rsp.data_length);
+	free(temp);
+	return 0;
 }
 
 static void *reply_handler(void *data)
@@ -387,8 +520,11 @@ static void *reply_handler(void *data)
 		if (empty)
 			continue;
 
-		for (uint64_t i = 0; i < events; i++)
-			sheep_handle_reply(c);
+		for (uint64_t i = 0; i < events; i++) {
+			int ret = sheep_handle_reply(c);
+			if (ret < 0)
+				break;
+		}
 
 	}
 	pthread_detach(pthread_self());
@@ -512,6 +648,7 @@ struct sd_cluster *sd_connect(char *host)
 
 	signal(SIGPIPE, SIG_IGN);
 
+	uatomic_set_true(&c->connected);
 	INIT_LIST_HEAD(&c->request_list);
 	INIT_LIST_HEAD(&c->inflight_list);
 	INIT_LIST_HEAD(&c->blocking_list);

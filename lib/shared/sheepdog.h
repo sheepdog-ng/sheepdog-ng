@@ -27,6 +27,7 @@
 
 struct sd_cluster {
 	int sockfd;
+	uatomic_bool connected;
 	struct sheep_host {
 		char addr[INET_ADDRSTRLEN];
 		unsigned int port;

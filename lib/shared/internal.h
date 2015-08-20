@@ -14,6 +14,15 @@
 #ifndef INTERNAL_H_
 #define INTERNAL_H_
 
+/*
+ * The timeout is the same as sheep cluster in net.h,
+ * But once we failed for sending or writing, we will
+ * try to reconnect coutinuously until we get one
+ * available sheep node.
+ */
+#define NET_SEND_TIMEOUT 5 /* second */
+#define NET_RECV_TIMEOUT 30 /* second */
+
 enum sheep_request_type {
 	VDI_READ = 1,
 	VDI_WRITE,
