@@ -315,11 +315,11 @@ static void reconnect_and_resend(struct sd_cluster *c)
 	/*
 	 * We don't free inflight_lock until all requests are resent to avoid
 	 * sending duplicated requests. If the connection lost again during the
-	 * period we resend requests, we just goto label　again and resend all
+	 * period we resend requests, we just goto label again and resend all
 	 * requests for the next time.
 	 *
 	 * Some requests might be resent twice or more in multiple disconnection
-	 * events so we　might get more than one response for the same request.
+	 * events so we might get more than one response for the same request.
 	 */
 	sd_read_lock(&c->inflight_lock);
 again:
@@ -409,18 +409,27 @@ static void *request_handler(void *data)
 
 	while (!uatomic_is_true(&c->stop_request_handler) ||
 	       !list_empty(&c->request_list)) {
+		bool empty;
+		uint64_t events;
 
-		eventfd_xread(c->request_fd);
-		sd_write_lock(&c->request_lock);
-		if (list_empty(&c->request_list)) {
-			sd_rw_unlock(&c->request_lock);
-			continue;
-		}
-		req = list_first_entry(&c->request_list, struct sd_request,
-				       list);
-		list_del(&req->list);
+		events = eventfd_xread(c->request_fd);
+
+		sd_read_lock(&c->request_lock);
+		empty = list_empty(&c->request_list);
 		sd_rw_unlock(&c->request_lock);
-		submit_request(req);
+
+		if (empty)
+			continue;
+
+		for (uint64_t i = 0; i < events; i++) {
+			sd_write_lock(&c->request_lock);
+			req = list_first_entry(&c->request_list,
+				struct sd_request, list);
+			list_del(&req->list);
+			sd_rw_unlock(&c->request_lock);
+
+			submit_request(req);
+		}
 	}
 	pthread_exit(NULL);
 }
