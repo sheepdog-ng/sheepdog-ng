@@ -422,7 +422,6 @@ static void *request_handler(void *data)
 		sd_rw_unlock(&c->request_lock);
 		submit_request(req);
 	}
-	pthread_detach(pthread_self());
 	pthread_exit(NULL);
 }
 
@@ -534,7 +533,6 @@ static void *reply_handler(void *data)
 		}
 
 	}
-	pthread_detach(pthread_self());
 	pthread_exit(NULL);
 }
 
