@@ -311,19 +311,26 @@ static void reconnect_and_resend(struct sd_cluster *c)
 {
 	struct sheep_request *request;
 	int ret;
+
+	/*
+	 * We don't free inflight_lock until all requests are resent to avoid
+	 * sending duplicated requests. If the connection lost again during the
+	 * period we resend requests, we just goto label　again and resend all
+	 * requests for the next time.
+	 *
+	 * Some requests might be resent twice or more in multiple disconnection
+	 * events so we　might get more than one response for the same request.
+	 */
+	sd_read_lock(&c->inflight_lock);
 again:
 	do_reconnect(c);
 
-	sd_read_lock(&c->inflight_lock);
-
 	list_for_each_entry(request, &c->inflight_list, list) {
 		ret = do_submit_sheep_request(request);
-		if (ret > 0) {
+		if (ret > 0)
 			eventfd_xwrite(c->reply_fd, 1);
-		} else {
-			sd_rw_unlock(&c->inflight_lock);
+		else
 			goto again;
-		}
 	}
 
 	sd_rw_unlock(&c->inflight_lock);
