@@ -25,6 +25,9 @@ static struct sd_option cluster_options[] = {
 	 "use multi-thread for 'cluster snapshot save'"},
 	{'t', "strict", false,
 	 "do not serve write request if number of nodes is not sufficient"},
+	{'d', "diff", false,
+	 "just output the changes between the two adjacent epoches"
+		"for cluster info"},
 	{ 0, NULL, false, NULL },
 };
 
@@ -34,6 +37,7 @@ static struct cluster_cmd_data {
 	uint8_t multithread;
 	bool force;
 	bool strict;
+	bool diff;
 	char name[STORE_LEN];
 } cluster_cmd_data;
 
@@ -167,12 +171,68 @@ static void print_nodes(const struct epoch_log *logs, uint16_t flags)
 	}
 }
 
+static void do_print_nodes_diff(const struct epoch_log *log1,
+				const struct epoch_log *log2, uint16_t flags,
+				char act)
+{
+	int i, j, nr_disk1 = 0, nr_disk2 = 0;
+	const struct sd_node *entry1, *entry2;
+	bool first = true;
+
+	for (i = 0; i < log1->nr_nodes; i++) {
+		entry1 = log1->nodes + i;
+		if (flags & SD_CLUSTER_FLAG_DISKMODE) {
+			for (nr_disk1 = 0; nr_disk1 < DISK_MAX; nr_disk1++) {
+				if (entry1->disks[nr_disk1].disk_id == 0)
+					break;
+			}
+		}
+		for (j = 0; j < log2->nr_nodes; j++) {
+			entry2 = log2->nodes + j;
+			if (flags & SD_CLUSTER_FLAG_DISKMODE) {
+				for (nr_disk2 = 0; nr_disk2 < DISK_MAX;
+						nr_disk2++) {
+					if (entry2->disks[nr_disk2].disk_id
+							== 0)
+						break;
+				}
+			}
+			if (node_cmp(entry1, entry2) == 0
+					&& nr_disk1 == nr_disk2)
+				break;
+		}
+
+		if (j == log2->nr_nodes) {
+			if (flags & SD_CLUSTER_FLAG_DISKMODE)
+				printf("%s%c%s(%d)", first ? "" : ", ",
+					act,
+					addr_to_str(entry1->nid.addr,
+						entry1->nid.port),
+					nr_disk1);
+			else
+				printf("%s%c%s",
+					first ? "" : ", ",
+					act,
+					addr_to_str(entry1->nid.addr,
+						entry1->nid.port));
+			first = false;
+		}
+	}
+}
+
+static void print_nodes_diff(const struct epoch_log *log,
+			const struct epoch_log *last_log, uint16_t flags)
+{
+	do_print_nodes_diff(log, last_log, flags, '+');
+	do_print_nodes_diff(last_log, log, flags, '-');
+}
+
 static int cluster_info(int argc, char **argv)
 {
 	int i, ret;
 	struct sd_req hdr;
 	struct sd_rsp *rsp = (struct sd_rsp *)&hdr;
-	struct epoch_log *logs, *log;
+	struct epoch_log *logs, *log, *last_log = NULL;
 	char *next_log;
 	int nr_logs, log_length;
 	time_t ti, ct;
@@ -250,6 +310,8 @@ retry:
 	next_log = (char *)logs;
 	for (i = 0; i < nr_logs; i++) {
 		log = (struct epoch_log *)next_log;
+		last_log = (struct epoch_log *)((char *)log->nodes
+				+ nodes_nr * sizeof(struct sd_node));
 		ti = log->time;
 		if (raw_output) {
 			snprintf(time_str, sizeof(time_str), "%" PRIu64, (uint64_t) ti);
@@ -260,7 +322,13 @@ retry:
 
 		printf(raw_output ? "%s %d" : "%s %6d", time_str, log->epoch);
 		printf(" [");
-		print_nodes(log, logs->flags);
+		if (cluster_cmd_data.diff) {
+			if (i == nr_logs - 1)
+				printf("formated");
+			else
+				print_nodes_diff(log, last_log, logs->flags);
+		} else
+			print_nodes(log, logs->flags);
 		printf("]\n");
 		next_log = (char *)log->nodes
 				+ nodes_nr * sizeof(struct sd_node);
@@ -714,7 +782,7 @@ failure:
 }
 
 static struct subcommand cluster_cmd[] = {
-	{"info", NULL, "aprhvT", "show cluster information",
+	{"info", NULL, "aprhvTd", "show cluster information",
 	 NULL, CMD_NEED_NODELIST, cluster_info, cluster_options},
 	{"format", NULL, "bctaphTf", "create a Sheepdog store",
 	 NULL, CMD_NEED_NODELIST, cluster_format, cluster_options},
@@ -765,6 +833,9 @@ static int cluster_parser(int ch, const char *opt)
 		cluster_cmd_data.multithread = true;
 	case 't':
 		cluster_cmd_data.strict = true;
+		break;
+	case 'd':
+		cluster_cmd_data.diff = true;
 		break;
 	}
 
