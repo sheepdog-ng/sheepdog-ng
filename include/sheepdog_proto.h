@@ -18,12 +18,12 @@
 # include <inttypes.h>
 # include <stdint.h>
 # include <string.h>
+# include <stdio.h>
 #endif
 
 #include <stdbool.h>
 #include <linux/limits.h>
 #include <stddef.h>
-#include <stdio.h>
 
 #define SD_PROTO_VER 0x02
 
