@@ -118,9 +118,11 @@ static int post_cluster_new_vdi(const struct sd_req *req, struct sd_rsp *rsp,
 {
 	unsigned long nr = rsp->vdi.vdi_id;
 	int ret = rsp->result;
+	char *name = data;
 
-	sd_info("base_vdi_id: %x, new vdi_id: %x",
-		req->vdi.base_vdi_id, rsp->vdi.vdi_id);
+	sd_info("name: %s, base_vdi_id: %x, new vdi_id: %x, sender: %s",
+		name, req->vdi.base_vdi_id, rsp->vdi.vdi_id,
+		node_to_str(sender));
 
 	sd_debug("done %d %lx", ret, nr);
 	if (ret == SD_RES_SUCCESS) {
@@ -214,6 +216,11 @@ static int post_cluster_del_vdi(const struct sd_req *req, struct sd_rsp *rsp,
 	unsigned long vid = rsp->vdi.vdi_id;
 	struct cache_deletion_work *dw;
 	int ret = rsp->result;
+	char *name = data;
+
+	sd_info("name: %s, base_vdi_id: %x, new vdi_id: %x, sender: %s",
+		name, req->vdi.base_vdi_id, rsp->vdi.vdi_id,
+		node_to_str(sender));
 
 	vdi_delete_state(vid);
 
