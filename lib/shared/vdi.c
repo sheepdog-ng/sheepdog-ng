@@ -61,7 +61,7 @@ static void free_vdi(struct sd_vdi *vdi)
 }
 
 static int find_vdi(struct sd_cluster *c, char *name,
-					char *tag, uint32_t *vid)
+		    char *tag, uint32_t *vid)
 {
 	struct sd_req hdr = {};
 	struct sd_rsp *rsp = (struct sd_rsp *)&hdr;
@@ -88,7 +88,7 @@ static int find_vdi(struct sd_cluster *c, char *name,
 }
 
 static int read_object(struct sd_cluster *c, uint64_t oid, void *data,
-		unsigned int datalen, uint64_t offset, bool direct)
+		       unsigned int datalen, uint64_t offset, bool direct)
 {
 	struct sd_req hdr = {};
 	int ret;
@@ -106,7 +106,7 @@ static int read_object(struct sd_cluster *c, uint64_t oid, void *data,
 }
 
 static int vdi_read_inode(struct sd_cluster *c, char *name,
-	char *tag, struct sd_inode *inode, bool onlyheader)
+			  char *tag, struct sd_inode *inode, bool onlyheader)
 {
 	int ret;
 	uint32_t vid;
@@ -198,29 +198,37 @@ void sync_done_func(struct sd_request *req)
 int sd_vdi_read(struct sd_cluster *c, struct sd_vdi *vdi, void *buf,
 		size_t count, off_t offset)
 {
-	struct sd_request *req;
 	struct sync_state s = {};
 
 	s.efd = eventfd(0, 0);
 	if (s.efd < 0)
 		return SD_RES_SYSTEM_ERROR;
 
-	req = alloc_request(c, buf, count, VDI_READ);
-	req->vdi = vdi;
-	req->offset = offset;
-	req->done_func = sync_done_func;
-	req->opaque = &s;
-	queue_request(req);
+	sd_vdi_aread(c, vdi, buf, count, offset, sync_done_func, &s);
 	eventfd_xread(s.efd);
 	close(s.efd);
 
 	return s.ret;
 }
 
+static int vdi_awrite(struct sd_cluster *c, struct sd_vdi *vdi, void *buf,
+		      size_t count, off_t offset,
+		      void (*done_func)(struct sd_request *), void *opaque)
+{
+	struct sd_request *req = alloc_request(c, buf, count, VDI_WRITE);
+
+	req->vdi = vdi;
+	req->offset = offset;
+	req->done_func = done_func;
+	req->opaque = opaque;
+	queue_request(req);
+
+	return SD_RES_SUCCESS;
+}
+
 int sd_vdi_write(struct sd_cluster *c, struct sd_vdi *vdi, void *buf,
 		 size_t count, off_t offset)
 {
-	struct sd_request *req = NULL;
 	struct sync_state s = {};
 
 	if (vdi_is_snapshot(vdi->inode)) {
@@ -232,12 +240,7 @@ int sd_vdi_write(struct sd_cluster *c, struct sd_vdi *vdi, void *buf,
 	if (s.efd < 0)
 		return SD_RES_SYSTEM_ERROR;
 
-	req = alloc_request(c, buf, count, VDI_WRITE);
-	req->vdi = vdi;
-	req->offset = offset;
-	req->done_func = sync_done_func;
-	req->opaque = &s;
-	queue_request(req);
+	vdi_awrite(c, vdi, buf, count, offset, sync_done_func, &s);
 	eventfd_xread(s.efd);
 	close(s.efd);
 
@@ -258,8 +261,8 @@ int sd_vdi_close(struct sd_cluster *c, struct sd_vdi *vdi)
 }
 
 static int do_vdi_create(struct sd_cluster *c, char *name, uint64_t vdi_size,
-			uint32_t base_vid, uint32_t *vdi_id,
-			bool snapshot, uint8_t store_policy)
+			 uint32_t base_vid, uint32_t *vdi_id,
+			 bool snapshot, uint8_t store_policy)
 {
 	struct sd_req hdr = {};
 	struct sd_rsp *rsp = (struct sd_rsp *)&hdr;
@@ -285,8 +288,8 @@ static int do_vdi_create(struct sd_cluster *c, char *name, uint64_t vdi_size,
 }
 
 static int write_object(struct sd_cluster *c, uint64_t oid, uint64_t cow_oid,
-	void *data, unsigned int datalen, uint64_t offset, uint32_t flags,
-	bool create, bool direct)
+			void *data, unsigned int datalen, uint64_t offset,
+			uint32_t flags, bool create, bool direct)
 {
 	struct sd_req hdr = {};
 	int ret;
@@ -343,28 +346,28 @@ int sd_vdi_snapshot(struct sd_cluster *c, char *name, char *snap_tag)
 
 	} else {
 		fprintf(stderr, "Failed to create snapshot:%s\n",
-				sd_strerr(ret));
+			sd_strerr(ret));
 		return ret;
 	}
 
 	if (inode->store_policy) {
 		fprintf(stderr, "Creating a snapshot of hypervolume"
-				" is not supported\n");
+			" is not supported\n");
 		return SD_RES_INVALID_PARMS;
 	}
 
 	ret = write_object(c, vid_to_vdi_oid(inode->vdi_id), 0, snap_tag,
-			SD_MAX_VDI_TAG_LEN, offsetof(struct sd_inode, tag), 0,
-			false, false);
+			   SD_MAX_VDI_TAG_LEN, offsetof(struct sd_inode, tag),
+			   0, false, false);
 
 	if (ret != SD_RES_SUCCESS) {
 		fprintf(stderr, "Failed to write object:%"PRIx64"\n",
-				vid_to_vdi_oid(inode->vdi_id));
+			vid_to_vdi_oid(inode->vdi_id));
 		return ret;
 	}
 
 	ret = do_vdi_create(c, inode->name, inode->vdi_size,
-			inode->vdi_id, NULL, true, 0);
+			    inode->vdi_id, NULL, true, 0);
 
 	if (ret != SD_RES_SUCCESS)
 		fprintf(stderr, "Failed to snapshot:%s\n", sd_strerr(ret));
@@ -396,13 +399,13 @@ int sd_vdi_create(struct sd_cluster *c, char *name, uint64_t size)
 		store_policy = 1;/** for hyper volume **/
 
 	ret = do_vdi_create(c, name, size, 0, NULL,
-			false, store_policy);
+			    false, store_policy);
 
 	return ret;
 }
 
 int sd_vdi_clone(struct sd_cluster *c, char *srcname,
-		char *srctag, char *dstname)
+		 char *srctag, char *dstname)
 {
 	int ret;
 	struct sd_inode *inode = NULL;
@@ -416,7 +419,7 @@ int sd_vdi_clone(struct sd_cluster *c, char *srcname,
 	if (!srctag || *srctag == '\0') {
 		ret = SD_RES_INVALID_PARMS;
 		fprintf(stderr, "Only snapshot VDIs can be cloned, "
-				"please specify snapshot tag\n");
+			"please specify snapshot tag\n");
 		goto out;
 	}
 
@@ -430,12 +433,12 @@ int sd_vdi_clone(struct sd_cluster *c, char *srcname,
 	ret = vdi_read_inode(c, srcname, srctag, inode, false);
 	if (ret != SD_RES_SUCCESS) {
 		fprintf(stderr, "Failed to read inode for VDI: %s "
-				"(tag: %s)\n", srcname, srctag);
+			"(tag: %s)\n", srcname, srctag);
 		goto out;
 	}
 
 	ret = do_vdi_create(c, dstname, inode->vdi_size, inode->vdi_id,
-			NULL, false, inode->store_policy);
+			    NULL, false, inode->store_policy);
 
 	if (ret != SD_RES_SUCCESS)
 		fprintf(stderr, "Clone vdi failed:%s\n", sd_strerr(ret));
@@ -460,8 +463,8 @@ int sd_vdi_delete(struct sd_cluster *c, char *name, char *tag)
 	ret = find_vdi(c, name, tag, &vid);
 	if (ret != SD_RES_SUCCESS) {
 		fprintf(stderr, "Failed to find VDI %s "
-				"(snapshot tag: %s): %s\n",
-				name, tag, sd_strerr(ret));
+			"(snapshot tag: %s): %s\n",
+			name, tag, sd_strerr(ret));
 		return ret;
 	}
 
@@ -478,7 +481,7 @@ int sd_vdi_delete(struct sd_cluster *c, char *name, char *tag)
 
 	if (ret != SD_RES_SUCCESS)
 		fprintf(stderr, "Failed to delete VDI %s(tag:%s): %s\n",
-				name, tag, sd_strerr(ret));
+			name, tag, sd_strerr(ret));
 
 	return ret;
 }
@@ -501,4 +504,33 @@ int sd_run_sdreq(struct sd_cluster *c, struct sd_req *hdr, void *data)
 	close(s.efd);
 
 	return s.ret;
+}
+
+int sd_vdi_aread(struct sd_cluster *c, struct sd_vdi *vdi, void *buf,
+		 size_t count, off_t offset,
+		 void (*done_func)(struct sd_request *), void *opaque)
+{
+	struct sd_request *req = alloc_request(c, buf, count, VDI_READ);
+
+	req->vdi = vdi;
+	req->offset = offset;
+	req->done_func = done_func;
+	req->opaque = opaque;
+	queue_request(req);
+
+	return SD_RES_SUCCESS;
+}
+
+int sd_vdi_awrite(struct sd_cluster *c, struct sd_vdi *vdi, void *buf,
+		  size_t count, off_t offset,
+		  void (*done_func)(struct sd_request *), void *opaque)
+{
+	if (vdi_is_snapshot(vdi->inode)) {
+		fprintf(stderr, "Snapshot is READ-ONLY!\n");
+		return SD_RES_INVALID_PARMS;
+	}
+
+	vdi_awrite(c, vdi, buf, count, offset, done_func, opaque);
+
+	return SD_RES_SUCCESS;
 }

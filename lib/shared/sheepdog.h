@@ -198,4 +198,37 @@ int sd_vdi_clone(struct sd_cluster *c, char *srcname,
  */
 int sd_vdi_delete(struct sd_cluster *c, char *name, char *tag);
 
+/*
+ * Read from a vdi descriptor at a given offset asynchronously.
+ *
+ * @vdi: pointer to the vdi descriptor.
+ * @buf: the buffer to hold the data.
+ * @count: how many bytes we read up to.
+ * @offset: the start of the vdi we try to read.
+ * @done_func: the address of the function that is called at request completion.
+ * @opaque: the address of user defined data structure that is expected
+ *          to be processed in done_func()
+ *
+ * Return error code defined in sheepdog_proto.h.
+ */
+int sd_vdi_aread(struct sd_cluster *c, struct sd_vdi *vdi, void *buf,
+		 size_t count, off_t offset,
+		 void (*done_func)(struct sd_request *), void *opaque);
+
+/*
+ * Write to a vdi descriptor at a given offset.
+ *
+ * @vdi: pointer to the vdi descriptor.
+ * @buf: the buffer to hold the data.
+ * @count: how many bytes we write up to.
+ * @offset: the start of the vdi we try to write.
+ * @done_func: the address of the function that is called at request completion.
+ * @opaque: the address of user defined data structure that is expected
+ *          to be processed in done_func()
+ *
+ * Return error code defined in sheepdog_proto.h.
+ */
+int sd_vdi_awrite(struct sd_cluster *c, struct sd_vdi *vdi, void *buf,
+		  size_t count, off_t offset,
+		  void (*done_func)(struct sd_request *), void *opaque);
 #endif
