@@ -54,35 +54,15 @@ struct sheep_request {
 	char *buf;
 };
 
-struct sync_state {
-	int efd;
-	int ret;
-};
-
 struct sd_op_template {
 	const char *name;
 	int (*request_process)(struct sheep_aiocb *aiocb);
 	int (*response_process)(struct sheep_request *req, struct sd_rsp *rsp);
 };
 
-struct sheep_request *find_inflight_request_oid(struct sd_cluster *c,
-						       uint64_t oid);
-struct sheep_request *alloc_sheep_request(struct sheep_aiocb *aiocb,
-						 uint64_t oid, uint64_t cow_oid,
-						 int len, int offset);
 int end_sheep_request(struct sheep_request *req);
-int sheep_submit_sdreq(struct sd_cluster *c, struct sd_req *hdr,
-			      void *data, uint32_t wlen);
 int submit_sheep_request(struct sheep_request *req);
 
 const struct sd_op_template *get_sd_op(uint8_t opcode);
-void submit_blocking_sheep_request(struct sd_cluster *c, uint64_t oid);
-
-uint32_t sheep_inode_get_vid(struct sd_request *req, uint32_t idx);
-
-struct sd_request *alloc_request(struct sd_cluster *c, void *data,
-	size_t count, uint8_t op);
-void queue_request(struct sd_request *req);
-void sync_done_func(struct sd_request *req);
 
 #endif

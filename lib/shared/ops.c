@@ -14,6 +14,56 @@
 #include "sheepdog.h"
 #include "internal.h"
 
+static uint32_t sheep_inode_get_vid(struct sd_request *req, uint32_t idx)
+{
+	uint32_t vid;
+
+	sd_read_lock(&req->vdi->lock);
+	vid = req->vdi->inode->data_vdi_id[idx];
+	sd_rw_unlock(&req->vdi->lock);
+
+	return vid;
+}
+
+static struct sheep_request *find_inflight_request_oid(struct sd_cluster *c,
+						       uint64_t oid)
+{
+	struct sheep_request *req;
+
+	sd_read_lock(&c->inflight_lock);
+	list_for_each_entry(req, &c->inflight_list, list) {
+		if (req->oid == oid) {
+			sd_rw_unlock(&c->inflight_lock);
+			return req;
+		}
+	}
+	sd_rw_unlock(&c->inflight_lock);
+	return NULL;
+}
+
+static struct sheep_request *alloc_sheep_request(struct sheep_aiocb *aiocb,
+						 uint64_t oid, uint64_t cow_oid,
+						 int len, int offset)
+{
+	struct sheep_request *req = xzalloc(sizeof(*req));
+	struct sd_cluster *c = aiocb->request->cluster;
+
+	req->offset = offset;
+	req->length = len;
+	req->oid = oid;
+	req->cow_oid = cow_oid;
+	req->aiocb = aiocb;
+	req->buf = aiocb->buf + aiocb->buf_iter;
+	req->seq_num = uatomic_add_return(&c->seq_num, 1);
+	req->opcode = aiocb->request->opcode;
+	aiocb->buf_iter += len;
+
+	INIT_LIST_NODE(&req->list);
+	uatomic_inc(&aiocb->nr_requests);
+
+	return req;
+}
+
 static int vdi_rw_request(struct sheep_aiocb *aiocb)
 {
 	struct sd_request *request = aiocb->request;
@@ -98,6 +148,20 @@ done:
 		aiocb->aio_done_func(aiocb);
 
 	return SD_RES_SUCCESS;
+}
+
+static void submit_blocking_sheep_request(struct sd_cluster *c, uint64_t oid)
+{
+	struct sheep_request *req;
+
+	sd_write_lock(&c->blocking_lock);
+	list_for_each_entry(req, &c->blocking_list, list) {
+		if (req->oid != oid)
+			continue;
+		list_del(&req->list);
+		submit_sheep_request(req);
+	}
+	sd_rw_unlock(&c->blocking_lock);
 }
 
 static int vdi_create_response(struct sheep_request *req, struct sd_rsp *rsp)

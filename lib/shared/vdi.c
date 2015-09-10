@@ -161,7 +161,7 @@ out_free:
 	return NULL;
 }
 
-void queue_request(struct sd_request *req)
+static void queue_request(struct sd_request *req)
 {
 	struct sd_cluster *c = req->cluster;
 
@@ -172,8 +172,8 @@ void queue_request(struct sd_request *req)
 	eventfd_xwrite(c->request_fd, 1);
 }
 
-struct sd_request *alloc_request(struct sd_cluster *c, void *data, size_t count,
-				 uint8_t op)
+static struct sd_request *alloc_request(struct sd_cluster *c, void *data,
+					size_t count, uint8_t op)
 {
 	struct sd_request *req;
 
@@ -187,7 +187,12 @@ struct sd_request *alloc_request(struct sd_cluster *c, void *data, size_t count,
 	return req;
 }
 
-void sync_done_func(struct sd_request *req)
+struct sync_state {
+	int efd;
+	int ret;
+};
+
+static void sync_done_func(struct sd_request *req)
 {
 	struct sync_state *s = req->opaque;
 

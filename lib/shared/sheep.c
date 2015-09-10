@@ -74,7 +74,7 @@ static ssize_t net_write(int fd, void *buf, size_t count)
 	return sum;
 }
 
-int sheep_submit_sdreq(struct sd_cluster *c, struct sd_req *hdr,
+static int sheep_submit_sdreq(struct sd_cluster *c, struct sd_req *hdr,
 			      void *data, uint32_t wlen)
 {
 	int ret;
@@ -133,40 +133,6 @@ static struct sheep_aiocb *sheep_aiocb_setup(struct sd_request *req)
 	uatomic_set(&aiocb->nr_requests, 0);
 
 	return aiocb;
-}
-
-struct sheep_request *alloc_sheep_request(struct sheep_aiocb *aiocb,
-						 uint64_t oid, uint64_t cow_oid,
-						 int len, int offset)
-{
-	struct sheep_request *req = xzalloc(sizeof(*req));
-	struct sd_cluster *c = aiocb->request->cluster;
-
-	req->offset = offset;
-	req->length = len;
-	req->oid = oid;
-	req->cow_oid = cow_oid;
-	req->aiocb = aiocb;
-	req->buf = aiocb->buf + aiocb->buf_iter;
-	req->seq_num = uatomic_add_return(&c->seq_num, 1);
-	req->opcode = aiocb->request->opcode;
-	aiocb->buf_iter += len;
-
-	INIT_LIST_NODE(&req->list);
-	uatomic_inc(&aiocb->nr_requests);
-
-	return req;
-}
-
-uint32_t sheep_inode_get_vid(struct sd_request *req, uint32_t idx)
-{
-	uint32_t vid;
-
-	sd_read_lock(&req->vdi->lock);
-	vid = req->vdi->inode->data_vdi_id[idx];
-	sd_rw_unlock(&req->vdi->lock);
-
-	return vid;
 }
 
 static int connect_to(char *ip, unsigned int port)
@@ -330,36 +296,6 @@ int submit_sheep_request(struct sheep_request *req)
 	eventfd_xwrite(c->reply_fd, 1);
 
 	return ret;
-}
-
-void submit_blocking_sheep_request(struct sd_cluster *c, uint64_t oid)
-{
-	struct sheep_request *req;
-
-	sd_write_lock(&c->blocking_lock);
-	list_for_each_entry(req, &c->blocking_list, list) {
-		if (req->oid != oid)
-			continue;
-		list_del(&req->list);
-		submit_sheep_request(req);
-	}
-	sd_rw_unlock(&c->blocking_lock);
-}
-
-struct sheep_request *find_inflight_request_oid(struct sd_cluster *c,
-						       uint64_t oid)
-{
-	struct sheep_request *req;
-
-	sd_read_lock(&c->inflight_lock);
-	list_for_each_entry(req, &c->inflight_list, list) {
-		if (req->oid == oid) {
-			sd_rw_unlock(&c->inflight_lock);
-			return req;
-		}
-	}
-	sd_rw_unlock(&c->inflight_lock);
-	return NULL;
 }
 
 static int sheep_aiocb_submit(struct sheep_aiocb *aiocb)
