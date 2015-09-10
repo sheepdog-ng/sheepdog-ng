@@ -172,25 +172,12 @@ void queue_request(struct sd_request *req)
 	eventfd_xwrite(c->request_fd, 1);
 }
 
-void free_request(struct sd_request *req)
-{
-	close(req->efd);
-	free(req);
-}
-
-struct sd_request *alloc_request(struct sd_cluster *c,
-	void *data, size_t count, uint8_t op)
+struct sd_request *alloc_request(struct sd_cluster *c, void *data, size_t count,
+				 uint8_t op)
 {
 	struct sd_request *req;
-	int fd;
 
-	fd = eventfd(0, 0);
-	if (fd < 0) {
-		errno = SD_RES_SYSTEM_ERROR;
-		return NULL;
-	}
 	req = xzalloc(sizeof(*req));
-	req->efd = fd;
 	req->cluster = c;
 	req->data = data;
 	req->length = count;
@@ -200,51 +187,61 @@ struct sd_request *alloc_request(struct sd_cluster *c,
 	return req;
 }
 
-int sd_vdi_read(struct sd_cluster *c, struct sd_vdi *vdi,
-			void *buf, size_t count, off_t offset)
+void sync_done_func(struct sd_request *req)
 {
-	struct sd_request *req = alloc_request(c, buf,
-					count, VDI_READ);
-	int ret;
+	struct sync_state *s = req->opaque;
 
-	if (!req)
-		return errno;
+	eventfd_xwrite(s->efd, 1);
+	s->ret = req->ret;
+}
 
+int sd_vdi_read(struct sd_cluster *c, struct sd_vdi *vdi, void *buf,
+		size_t count, off_t offset)
+{
+	struct sd_request *req;
+	struct sync_state s = {};
+
+	s.efd = eventfd(0, 0);
+	if (s.efd < 0)
+		return SD_RES_SYSTEM_ERROR;
+
+	req = alloc_request(c, buf, count, VDI_READ);
 	req->vdi = vdi;
 	req->offset = offset;
+	req->done_func = sync_done_func;
+	req->opaque = &s;
 	queue_request(req);
+	eventfd_xread(s.efd);
+	close(s.efd);
 
-	eventfd_xread(req->efd);
-	ret = req->ret;
-	free_request(req);
-
-	return ret;
+	return s.ret;
 }
 
 int sd_vdi_write(struct sd_cluster *c, struct sd_vdi *vdi, void *buf,
-			size_t count, off_t offset)
+		 size_t count, off_t offset)
 {
 	struct sd_request *req = NULL;
-	int ret;
+	struct sync_state s = {};
 
 	if (vdi_is_snapshot(vdi->inode)) {
 		fprintf(stderr, "Snapshot is READ-ONLY!\n");
 		return SD_RES_INVALID_PARMS;
 	}
 
-	req = alloc_request(c, buf, count, VDI_WRITE);
-	if (!req)
-		return errno;
+	s.efd = eventfd(0, 0);
+	if (s.efd < 0)
+		return SD_RES_SYSTEM_ERROR;
 
+	req = alloc_request(c, buf, count, VDI_WRITE);
 	req->vdi = vdi;
 	req->offset = offset;
+	req->done_func = sync_done_func;
+	req->opaque = &s;
 	queue_request(req);
+	eventfd_xread(s.efd);
+	close(s.efd);
 
-	eventfd_xread(req->efd);
-	ret = req->ret;
-	free_request(req);
-
-	return ret;
+	return s.ret;
 }
 
 int sd_vdi_close(struct sd_cluster *c, struct sd_vdi *vdi)
@@ -484,4 +481,24 @@ int sd_vdi_delete(struct sd_cluster *c, char *name, char *tag)
 				name, tag, sd_strerr(ret));
 
 	return ret;
+}
+
+int sd_run_sdreq(struct sd_cluster *c, struct sd_req *hdr, void *data)
+{
+	struct sd_request *req;
+	struct sync_state s = {};
+
+	s.efd = eventfd(0, 0);
+	if (s.efd < 0)
+		return SD_RES_SYSTEM_ERROR;
+
+	req = alloc_request(c, data, hdr->data_length, SHEEP_CTL);
+	req->hdr = hdr;
+	req->opaque = &s;
+	req->done_func = sync_done_func;
+	queue_request(req);
+	eventfd_xread(s.efd);
+	close(s.efd);
+
+	return s.ret;
 }

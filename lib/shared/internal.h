@@ -30,21 +30,6 @@ enum sheep_request_type {
 	SHEEP_CTL,
 };
 
-struct sd_request {
-	struct sd_cluster *cluster;
-	struct list_node list;
-	union {
-		struct sd_vdi *vdi;
-		struct sd_req *hdr;
-	};
-	void *data;
-	size_t length;
-	off_t offset;
-	uint8_t opcode;
-	int efd;
-	int ret;
-};
-
 struct sheep_aiocb {
 	struct sd_request *request;
 	off_t offset;
@@ -67,6 +52,11 @@ struct sheep_request {
 	uint32_t offset;
 	uint32_t length;
 	char *buf;
+};
+
+struct sync_state {
+	int efd;
+	int ret;
 };
 
 struct sd_op_template {
@@ -93,6 +83,6 @@ uint32_t sheep_inode_get_vid(struct sd_request *req, uint32_t idx);
 struct sd_request *alloc_request(struct sd_cluster *c, void *data,
 	size_t count, uint8_t op);
 void queue_request(struct sd_request *req);
-void free_request(struct sd_request *req);
+void sync_done_func(struct sd_request *req);
 
 #endif

@@ -106,30 +106,11 @@ out:
 	return ret;
 }
 
-/* Run the request synchronously */
-int sd_run_sdreq(struct sd_cluster *c, struct sd_req *hdr, void *data)
-{
-	struct sd_request *req = alloc_request(c, data,
-		hdr->data_length, SHEEP_CTL);
-	int ret;
-
-	if (!req)
-		return SD_RES_SYSTEM_ERROR;
-
-	req->hdr = hdr;
-	queue_request(req);
-
-	eventfd_xread(req->efd);
-	ret = req->ret;
-	free_request(req);
-
-	return ret;
-}
-
 static void aio_end_request(struct sd_request *req, int ret)
 {
 	req->ret = ret;
-	eventfd_xwrite(req->efd, 1);
+	req->done_func(req);
+	free(req);
 }
 
 static void aio_rw_done(struct sheep_aiocb *aiocb)

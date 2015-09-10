@@ -56,6 +56,22 @@ struct sd_vdi {
 	char *name;
 };
 
+struct sd_request {
+	struct sd_cluster *cluster;
+	struct list_node list;
+	union {
+		struct sd_vdi *vdi;
+		struct sd_req *hdr;
+	};
+	void *data;
+	size_t length;
+	off_t offset;
+	uint8_t opcode;
+	void (*done_func)(struct sd_request *);
+	void *opaque;
+	int ret;
+};
+
 /*
  * Connect to the specified Sheepdog cluster.
  *
