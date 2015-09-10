@@ -20,7 +20,6 @@
 #include <sys/socket.h>
 #include <netinet/tcp.h>
 #include <pthread.h>
-#include <signal.h>
 
 static ssize_t net_read(int fd, void *buf, size_t count)
 {
@@ -55,7 +54,7 @@ static ssize_t net_write(int fd, void *buf, size_t count)
 	while (count != 0) {
 		ssize_t written = 0;
 		while (true) {
-			written = write(fd, p, count);
+			written = send(fd, p, count, MSG_NOSIGNAL);
 			if (unlikely(written < 0) && (errno == EINTR))
 				continue;
 			break;
@@ -577,8 +576,6 @@ struct sd_cluster *sd_connect(char *host)
 		errno = -ret;
 		goto err_close;
 	};
-
-	signal(SIGPIPE, SIG_IGN);
 
 	uatomic_set_true(&c->connected);
 	INIT_LIST_HEAD(&c->request_list);
