@@ -109,7 +109,8 @@ out:
 static void aio_end_request(struct sd_request *req, int ret)
 {
 	req->ret = ret;
-	req->done_func(req);
+	if (req->done_func)
+		req->done_func(req);
 	free(req);
 }
 
