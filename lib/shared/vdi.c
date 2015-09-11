@@ -14,7 +14,7 @@
 #include "sheepdog.h"
 #include "internal.h"
 
-static int lock_vdi(struct sd_cluster *c, struct sd_vdi *vdi)
+static int lock_vdi(struct sd_vdi *vdi)
 {
 	struct sd_req hdr = {};
 	int ret;
@@ -22,12 +22,12 @@ static int lock_vdi(struct sd_cluster *c, struct sd_vdi *vdi)
 	hdr.opcode = SD_OP_LOCK_VDI;
 	hdr.data_length = SD_MAX_VDI_LEN;
 	hdr.flags = SD_FLAG_CMD_WRITE;
-	ret = sd_run_sdreq(c, &hdr, vdi->name);
+	ret = sd_run_sdreq(vdi->c, &hdr, vdi->name);
 
 	return ret;
 }
 
-static int unlock_vdi(struct sd_cluster *c, struct sd_vdi *vdi)
+static int unlock_vdi(struct sd_vdi *vdi)
 {
 	struct sd_req hdr = {};
 	int ret;
@@ -35,7 +35,7 @@ static int unlock_vdi(struct sd_cluster *c, struct sd_vdi *vdi)
 	hdr.opcode = SD_OP_RELEASE_VDI;
 	hdr.vdi.type = LOCK_TYPE_NORMAL;
 	hdr.vdi.base_vdi_id = vdi->vid;
-	ret = sd_run_sdreq(c, &hdr, NULL);
+	ret = sd_run_sdreq(vdi->c, &hdr, NULL);
 	if (ret != SD_RES_SUCCESS)
 		return ret;
 
@@ -145,9 +145,10 @@ struct sd_vdi *sd_vdi_open(struct sd_cluster *c, char *name, char *tag)
 		goto out_free;
 	}
 	new->vid = new->inode->vdi_id;
+	new->c = c;
 
 	if (!vdi_is_snapshot(new->inode)) {
-		ret = lock_vdi(c, new);
+		ret = lock_vdi(new);
 		if (ret != SD_RES_SUCCESS) {
 			errno = ret;
 			goto out_free;
@@ -155,7 +156,6 @@ struct sd_vdi *sd_vdi_open(struct sd_cluster *c, char *name, char *tag)
 	}
 
 	return new;
-
 out_free:
 	free_vdi(new);
 	return NULL;
@@ -200,8 +200,7 @@ static void sync_done_func(void *opaque, int ret)
 	s->ret = ret;
 }
 
-int sd_vdi_read(struct sd_cluster *c, struct sd_vdi *vdi, void *buf,
-		size_t count, off_t offset)
+int sd_vdi_read(struct sd_vdi *vdi, void *buf, size_t count, off_t offset)
 {
 	struct sync_state s = {};
 
@@ -209,18 +208,17 @@ int sd_vdi_read(struct sd_cluster *c, struct sd_vdi *vdi, void *buf,
 	if (s.efd < 0)
 		return SD_RES_SYSTEM_ERROR;
 
-	sd_vdi_aread(c, vdi, buf, count, offset, sync_done_func, &s);
+	sd_vdi_aread(vdi, buf, count, offset, sync_done_func, &s);
 	eventfd_xread(s.efd);
 	close(s.efd);
 
 	return s.ret;
 }
 
-static int vdi_awrite(struct sd_cluster *c, struct sd_vdi *vdi, void *buf,
-		      size_t count, off_t offset,
+static int vdi_awrite(struct sd_vdi *vdi, void *buf, size_t count, off_t offset,
 		      void (*done_func)(void *, int), void *opaque)
 {
-	struct sd_request *req = alloc_request(c, buf, count, VDI_WRITE);
+	struct sd_request *req = alloc_request(vdi->c, buf, count, VDI_WRITE);
 
 	req->vdi = vdi;
 	req->offset = offset;
@@ -231,8 +229,7 @@ static int vdi_awrite(struct sd_cluster *c, struct sd_vdi *vdi, void *buf,
 	return SD_RES_SUCCESS;
 }
 
-int sd_vdi_write(struct sd_cluster *c, struct sd_vdi *vdi, void *buf,
-		 size_t count, off_t offset)
+int sd_vdi_write(struct sd_vdi *vdi, void *buf, size_t count, off_t offset)
 {
 	struct sync_state s = {};
 
@@ -245,18 +242,18 @@ int sd_vdi_write(struct sd_cluster *c, struct sd_vdi *vdi, void *buf,
 	if (s.efd < 0)
 		return SD_RES_SYSTEM_ERROR;
 
-	vdi_awrite(c, vdi, buf, count, offset, sync_done_func, &s);
+	vdi_awrite(vdi, buf, count, offset, sync_done_func, &s);
 	eventfd_xread(s.efd);
 	close(s.efd);
 
 	return s.ret;
 }
 
-int sd_vdi_close(struct sd_cluster *c, struct sd_vdi *vdi)
+int sd_vdi_close(struct sd_vdi *vdi)
 {
 	int ret;
 
-	ret = unlock_vdi(c, vdi);
+	ret = unlock_vdi(vdi);
 	if (ret != SD_RES_SUCCESS) {
 		fprintf(stderr, "failed to unlock %s\n", vdi->name);
 		return ret;
@@ -511,11 +508,10 @@ int sd_run_sdreq(struct sd_cluster *c, struct sd_req *hdr, void *data)
 	return s.ret;
 }
 
-int sd_vdi_aread(struct sd_cluster *c, struct sd_vdi *vdi, void *buf,
-		 size_t count, off_t offset,
+int sd_vdi_aread(struct sd_vdi *vdi, void *buf, size_t count, off_t offset,
 		 void (*done_func)(void *, int), void *opaque)
 {
-	struct sd_request *req = alloc_request(c, buf, count, VDI_READ);
+	struct sd_request *req = alloc_request(vdi->c, buf, count, VDI_READ);
 
 	req->vdi = vdi;
 	req->offset = offset;
@@ -526,8 +522,7 @@ int sd_vdi_aread(struct sd_cluster *c, struct sd_vdi *vdi, void *buf,
 	return SD_RES_SUCCESS;
 }
 
-int sd_vdi_awrite(struct sd_cluster *c, struct sd_vdi *vdi, void *buf,
-		  size_t count, off_t offset,
+int sd_vdi_awrite(struct sd_vdi *vdi, void *buf, size_t count, off_t offset,
 		  void (*done_func)(void *, int), void *opaque)
 {
 	if (vdi_is_snapshot(vdi->inode)) {
@@ -535,7 +530,7 @@ int sd_vdi_awrite(struct sd_cluster *c, struct sd_vdi *vdi, void *buf,
 		return SD_RES_INVALID_PARMS;
 	}
 
-	vdi_awrite(c, vdi, buf, count, offset, done_func, opaque);
+	vdi_awrite(vdi, buf, count, offset, done_func, opaque);
 
 	return SD_RES_SUCCESS;
 }
