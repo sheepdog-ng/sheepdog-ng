@@ -192,12 +192,12 @@ struct sync_state {
 	int ret;
 };
 
-static void sync_done_func(struct sd_request *req)
+static void sync_done_func(void *opaque, int ret)
 {
-	struct sync_state *s = req->opaque;
+	struct sync_state *s = opaque;
 
 	eventfd_xwrite(s->efd, 1);
-	s->ret = req->ret;
+	s->ret = ret;
 }
 
 int sd_vdi_read(struct sd_cluster *c, struct sd_vdi *vdi, void *buf,
@@ -218,7 +218,7 @@ int sd_vdi_read(struct sd_cluster *c, struct sd_vdi *vdi, void *buf,
 
 static int vdi_awrite(struct sd_cluster *c, struct sd_vdi *vdi, void *buf,
 		      size_t count, off_t offset,
-		      void (*done_func)(struct sd_request *), void *opaque)
+		      void (*done_func)(void *, int), void *opaque)
 {
 	struct sd_request *req = alloc_request(c, buf, count, VDI_WRITE);
 
@@ -513,7 +513,7 @@ int sd_run_sdreq(struct sd_cluster *c, struct sd_req *hdr, void *data)
 
 int sd_vdi_aread(struct sd_cluster *c, struct sd_vdi *vdi, void *buf,
 		 size_t count, off_t offset,
-		 void (*done_func)(struct sd_request *), void *opaque)
+		 void (*done_func)(void *, int), void *opaque)
 {
 	struct sd_request *req = alloc_request(c, buf, count, VDI_READ);
 
@@ -528,7 +528,7 @@ int sd_vdi_aread(struct sd_cluster *c, struct sd_vdi *vdi, void *buf,
 
 int sd_vdi_awrite(struct sd_cluster *c, struct sd_vdi *vdi, void *buf,
 		  size_t count, off_t offset,
-		  void (*done_func)(struct sd_request *), void *opaque)
+		  void (*done_func)(void *, int), void *opaque)
 {
 	if (vdi_is_snapshot(vdi->inode)) {
 		fprintf(stderr, "Snapshot is READ-ONLY!\n");

@@ -54,6 +54,22 @@ struct sheep_request {
 	char *buf;
 };
 
+struct sd_request {
+	struct sd_cluster *cluster;
+	struct list_node list;
+	union {
+		struct sd_vdi *vdi;
+		struct sd_req *hdr;
+	};
+	void *data;
+	size_t length;
+	off_t offset;
+	uint8_t opcode;
+	void (*done_func)(void *, int);
+	void *opaque;
+	int ret;
+};
+
 struct sd_op_template {
 	const char *name;
 	int (*request_process)(struct sheep_aiocb *aiocb);

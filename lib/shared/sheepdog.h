@@ -56,22 +56,6 @@ struct sd_vdi {
 	char *name;
 };
 
-struct sd_request {
-	struct sd_cluster *cluster;
-	struct list_node list;
-	union {
-		struct sd_vdi *vdi;
-		struct sd_req *hdr;
-	};
-	void *data;
-	size_t length;
-	off_t offset;
-	uint8_t opcode;
-	void (*done_func)(struct sd_request *);
-	void *opaque;
-	int ret;
-};
-
 /*
  * Connect to the specified Sheepdog cluster.
  *
@@ -213,7 +197,7 @@ int sd_vdi_delete(struct sd_cluster *c, char *name, char *tag);
  */
 int sd_vdi_aread(struct sd_cluster *c, struct sd_vdi *vdi, void *buf,
 		 size_t count, off_t offset,
-		 void (*done_func)(struct sd_request *), void *opaque);
+		 void (*done_func)(void *, int), void *opaque);
 
 /*
  * Write to a vdi descriptor at a given offset.
@@ -230,5 +214,5 @@ int sd_vdi_aread(struct sd_cluster *c, struct sd_vdi *vdi, void *buf,
  */
 int sd_vdi_awrite(struct sd_cluster *c, struct sd_vdi *vdi, void *buf,
 		  size_t count, off_t offset,
-		  void (*done_func)(struct sd_request *), void *opaque);
+		  void (*done_func)(void *, int), void *opaque);
 #endif
