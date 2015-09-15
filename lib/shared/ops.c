@@ -226,7 +226,6 @@ static int sheep_ctl_request(struct sheep_aiocb *aiocb)
 static int sheep_ctl_response(struct sheep_request *req, struct sd_rsp *rsp)
 {
 	memcpy(req->aiocb->request->hdr, rsp, sizeof(*rsp));
-	req->aiocb->ret = rsp->result;
 	return SD_RES_SUCCESS;
 }
 

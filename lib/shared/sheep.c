@@ -417,6 +417,14 @@ static int sheep_handle_reply(struct sd_cluster *c)
 	if (aiocb->op != NULL && !!aiocb->op->response_process)
 		ret = aiocb->op->response_process(req, &rsp);
 
+	/*
+	 * Only when failed we assign the error no to
+	 * aiocb. Otherwise, the following success request
+	 * may overwrite the previous error.
+	 */
+	if (rsp.result != SD_RES_SUCCESS)
+		aiocb->ret = rsp.result;
+
 	end_sheep_request(req);
 
 	return ret;
