@@ -82,15 +82,15 @@ sd_vdi_open.argtypes = [c_void_p, c_char_p, c_char_p]
 sd_vdi_open.restype = c_void_p
 
 sd_vdi_close = libshared.sd_vdi_close
-sd_vdi_close.argtypes = [c_void_p, c_void_p]
+sd_vdi_close.argtypes = [c_void_p]
 sd_vdi_close.restype = c_int
 
 sd_vdi_read = libshared.sd_vdi_read
-sd_vdi_read.argtypes = [c_void_p, c_void_p, c_void_p, c_ulonglong, c_ulonglong]
+sd_vdi_read.argtypes = [c_void_p, c_void_p, c_ulonglong, c_ulonglong]
 sd_vdi_read.restype = c_int
 
 sd_vdi_write = libshared.sd_vdi_write
-sd_vdi_write.argtypes = [c_void_p, c_void_p, c_void_p, c_ulonglong, c_ulonglong]
+sd_vdi_write.argtypes = [c_void_p, c_void_p, c_ulonglong, c_ulonglong]
 sd_vdi_write.restype = c_int
 
 sd_vdi_snapshot = libshared.sd_vdi_snapshot
@@ -149,7 +149,7 @@ class sheepdog_driver():
     @vd: the volume descritor.
     '''
     def close(self, vd):
-        err_code = sd_vdi_close(self.connection, vd)
+        err_code = sd_vdi_close(vd)
         if err_code != 0:
             err_handle(err_code)
 
@@ -161,7 +161,7 @@ class sheepdog_driver():
     '''
     def read(self, vd, size, offset):
         buffer = create_string_buffer(size)
-        err_code = sd_vdi_read(self.connection, vd, buffer, size, offset)
+        err_code = sd_vdi_read(vd, buffer, size, offset)
         if err_code != 0:
             err_handle(err_code)
         return buffer.raw
@@ -173,7 +173,7 @@ class sheepdog_driver():
     @data: the data to be write.
     '''
     def write(self, vd, data, size, offset):
-        err_code = sd_vdi_write(self.connection, vd, data, size, offset)
+        err_code = sd_vdi_write(vd, data, size, offset)
         if err_code != 0:
             err_handle(err_code)
 
