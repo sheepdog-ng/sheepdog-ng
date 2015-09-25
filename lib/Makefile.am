@@ -19,7 +19,7 @@ pkginclude_HEADERS      = ../include/sheepdog_proto.h shared/sheepdog.h \
 
 lib_LIBRARIES 		= libsheepdog.a
 
-libsheepdog_a_SOURCES  	= shared/sheep.c shared/vdi.c util.c
+libsheepdog_a_SOURCES  	= shared/sheep.c shared/vdi.c shared/ops.c util.c
 
 libsheepdog_a_CPPFLAGS  = $(AM_CPPFLAGS) -DNO_SHEEPDOG_LOGGER
 
