@@ -65,6 +65,7 @@ static void *init_erasure_buffer(struct request *req, int buf_len)
 	struct sd_req hdr;
 	uint64_t head = round_down(off, SD_EC_DATA_STRIPE_SIZE);
 	uint64_t tail = round_down(off + len, SD_EC_DATA_STRIPE_SIZE);
+	uint64_t done = UINT64_MAX;
 	int ret;
 
 	if (opcode != SD_OP_WRITE_OBJ)
@@ -76,6 +77,7 @@ static void *init_erasure_buffer(struct request *req, int buf_len)
 		hdr.obj.oid = oid;
 		hdr.data_length = SD_EC_DATA_STRIPE_SIZE;
 		hdr.obj.offset = head;
+		done = head;
 		ret = exec_local_req(&hdr, buf);
 		if (ret != SD_RES_SUCCESS) {
 			free(buf);
@@ -83,7 +85,7 @@ static void *init_erasure_buffer(struct request *req, int buf_len)
 		}
 	}
 
-	if ((len + off) % SD_EC_DATA_STRIPE_SIZE && tail - head > 0) {
+	if ((len + off) % SD_EC_DATA_STRIPE_SIZE && done != tail) {
 		/* Read tail */
 		sd_init_req(&hdr, SD_OP_READ_OBJ);
 		hdr.obj.oid = oid;

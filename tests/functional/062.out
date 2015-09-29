@@ -1,11 +1,11 @@
 QA output created by 062
 using backend plain store
-= test 0 4095 0 0 MASKED 7c2b25 6
+= test 0 4095 0 0 MASKED 7c2b25 4:2
 hello
-world
+HELlo
 h!!!
 h^^!
 xxx
 h^^!
-world
+HELlo
 erxxxxxxcode
