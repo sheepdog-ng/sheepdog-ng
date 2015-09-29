@@ -473,18 +473,13 @@ int read_backend_object(uint64_t oid, char *data, unsigned int datalen,
 			uint64_t offset)
 {
 	struct sd_req hdr;
-	int ret;
 
 	sd_init_req(&hdr, SD_OP_READ_OBJ);
 	hdr.data_length = datalen;
 	hdr.obj.oid = oid;
 	hdr.obj.offset = offset;
 
-	ret = exec_local_req(&hdr, data);
-	if (ret != SD_RES_SUCCESS)
-		sd_err("failed to read object %" PRIx64 ", %s", oid,
-		       sd_strerror(ret));
-	return ret;
+	return exec_local_req(&hdr, data);
 }
 
 /*

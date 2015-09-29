@@ -269,8 +269,8 @@ static int gateway_replication_read(struct request *req)
 		if (ret == SD_RES_SUCCESS)
 			goto out;
 
-		sd_err("local read %"PRIx64" failed, %s", oid,
-		       sd_strerror(ret));
+		sd_debug("local read %"PRIx64" failed, %s", oid,
+			 sd_strerror(ret));
 		break;
 	}
 
