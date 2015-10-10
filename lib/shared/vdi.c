@@ -386,11 +386,6 @@ int sd_vdi_create(struct sd_cluster *c, char *name, uint64_t size)
 		return SD_RES_INVALID_PARMS;
 	}
 
-	if (size == 0) {
-		fprintf(stderr, "VDI size must be larger than 0\n");
-		return SD_RES_INVALID_PARMS;
-	}
-
 	if (!name || *name == '\0') {
 		fprintf(stderr, "VDI name can NOT be null!\n");
 		return SD_RES_INVALID_PARMS;
