@@ -529,3 +529,64 @@ int sd_vdi_awrite(struct sd_vdi *vdi, void *buf, size_t count, off_t offset,
 
 	return SD_RES_SUCCESS;
 }
+
+uint64_t sd_vdi_getsize(struct sd_vdi *vdi)
+{
+	return vdi->inode->vdi_size;
+}
+
+int sd_vdi_resize(struct sd_cluster *c, char *name, uint64_t new_size)
+{
+	int ret;
+	char buf[SD_INODE_HEADER_SIZE];
+	struct sd_inode *inode = (struct sd_inode *)buf;
+
+	if (!name || *name == '\0') {
+		fprintf(stderr, "VDI name can NOT be null\n");
+		ret = SD_RES_INVALID_PARMS;
+		goto out;
+	}
+
+	if (new_size < 0) {
+		fprintf(stderr, "negative size received, not allowed\n");
+		ret = SD_RES_INVALID_PARMS;
+		goto out;
+	}
+
+	if (new_size > SD_MAX_VDI_SIZE) {
+		fprintf(stderr, "new size is too large, not allowed\n");
+		ret = SD_RES_INVALID_PARMS;
+		goto out;
+	}
+
+	ret = vdi_read_inode(c, name, (char *)"", inode, true);
+	if (ret != SD_RES_SUCCESS) {
+		fprintf(stderr, "Failed to read inode for VDI: %s\n", name);
+		goto out;
+	}
+
+	if (new_size < inode->vdi_size) {
+		fprintf(stderr, "shrinking VDI is not implemented\n");
+		ret = SD_RES_INVALID_PARMS;
+		goto out;
+	}
+
+	if (new_size == inode->vdi_size) {
+		fprintf(stdout, "original size given, nothing touched\n");
+		ret = SD_RES_SUCCESS;
+		goto out;
+	}
+
+	inode->vdi_size = new_size;
+
+	ret = write_object(c, vid_to_vdi_oid(inode->vdi_id), 0, inode,
+			   SD_INODE_HEADER_SIZE, 0, 0, false, true);
+	if (ret != SD_RES_SUCCESS) {
+		fprintf(stderr, "Failed to write object:%"PRIx64"\n",
+			vid_to_vdi_oid(inode->vdi_id));
+		goto out;
+	}
+
+out:
+	return ret;
+}

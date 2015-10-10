@@ -101,6 +101,14 @@ sd_vdi_clone = libshared.sd_vdi_clone
 sd_vdi_clone.argtypes = [c_void_p, c_char_p, c_char_p, c_char_p]
 sd_vdi_clone.restype = c_int
 
+sd_vdi_getsize = libshared.sd_vdi_getsize
+sd_vdi_getsize.argtypes = [c_void_p]
+sd_vdi_getsize.restype = c_ulong
+
+sd_vdi_resize = libshared.sd_vdi_resize
+sd_vdi_resize.argtypes = [c_void_p, c_char_p, c_ulong]
+sd_vdi_resize.restype = c_int
+
 class sheepdog_driver():
     '''the sheepdog driver class.
     @connection: a connection to the sheepdog server.
@@ -196,6 +204,14 @@ class sheepdog_driver():
     def clone(self, srcname, srctag, dstname):
         err_code = sd_vdi_clone(self.connection, srcname, srctag, dstname)
         if err_code != 0:
+            err_handle(err_code)
+
+    def getsize(self, vd):
+        return sd_vdi_getsize(vd)
+
+    def resize(self, name, new_size):
+        err_code = sd_vdi_resize(self.connection, name, new_size)
+        if (err_code != 0):
             err_handle(err_code)
 
 '''Connect to the Sheepdog cluster.

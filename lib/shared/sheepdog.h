@@ -212,4 +212,26 @@ int sd_vdi_aread(struct sd_vdi *vdi, void *buf, size_t count, off_t offset,
  */
 int sd_vdi_awrite(struct sd_vdi *vdi, void *buf, size_t count, off_t offset,
 		  void (*done_func)(void *, int), void *opaque);
+
+/*
+ * Get the size of an opened vdi.
+ *
+ * @vdi: pointer to the vdi descriptor.
+ *
+ * Return the size of an opened vdi.
+ */
+uint64_t sd_vdi_getsize(struct sd_vdi *vdi);
+
+/*
+ * Resize a vdi.
+ *
+ * @c: pointer to the cluster descriptor.
+ * @name: the name of the vdi to be resized.
+ * @new_size: new size wanted.
+ *  (NOTE: new_size should be no smaller than original size for now)
+ *
+ * Return error code defined in sheepdog_proto.h.
+ */
+int sd_vdi_resize(struct sd_cluster *c, char *name, uint64_t new_size);
+
 #endif
