@@ -547,12 +547,6 @@ int sd_vdi_resize(struct sd_cluster *c, char *name, uint64_t new_size)
 		goto out;
 	}
 
-	if (new_size < 0) {
-		fprintf(stderr, "negative size received, not allowed\n");
-		ret = SD_RES_INVALID_PARMS;
-		goto out;
-	}
-
 	if (new_size > SD_MAX_VDI_SIZE) {
 		fprintf(stderr, "new size is too large, not allowed\n");
 		ret = SD_RES_INVALID_PARMS;
