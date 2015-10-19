@@ -234,4 +234,17 @@ uint64_t sd_vdi_getsize(struct sd_vdi *vdi);
  */
 int sd_vdi_resize(struct sd_cluster *c, char *name, uint64_t new_size);
 
+/*
+ * Rollback a VDI from it's early snapshot
+ *
+ * @c: pointer to the cluster descriptor
+ * @name: the name of VDI to be rollbacked
+ * @tag: the snapshot tag of the VDI
+ *
+ * Return error code defined in sheepdog_proto.h
+ * Notice that even if sd_vdi_rollback() failed, the working VDI
+ * might have been deleted.
+ */
+int sd_vdi_rollback(struct sd_cluster *c, char *name, char *tag);
+
 #endif

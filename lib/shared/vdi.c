@@ -584,3 +584,57 @@ int sd_vdi_resize(struct sd_cluster *c, char *name, uint64_t new_size)
 out:
 	return ret;
 }
+
+int sd_vdi_rollback(struct sd_cluster *c, char *name, char *tag)
+{
+	int ret;
+	char buf[SD_INODE_HEADER_SIZE];
+	struct sd_inode *inode = (struct sd_inode *)buf;
+
+	if (!tag || *tag == '\0') {
+		fprintf(stderr, "Snapshot tag can NOT be null for rollback\n");
+		return SD_RES_INVALID_PARMS;
+	}
+	if (!name || *name == '\0') {
+		fprintf(stderr, "VDI name can NOT be null\n");
+		return SD_RES_INVALID_PARMS;
+	}
+
+	ret = find_vdi(c, name, NULL, NULL);
+	if (ret != SD_RES_SUCCESS) {
+		fprintf(stderr, "Working VDI %s does NOT exist\n", name);
+		return SD_RES_INVALID_PARMS;
+	}
+
+	ret = find_vdi(c, name, tag, NULL);
+	if (ret != SD_RES_SUCCESS) {
+		fprintf(stderr, "Snapshot VDI %s(tag: %s) does NOT exist\n",
+				name, tag);
+		return SD_RES_INVALID_PARMS;
+	}
+
+	ret = vdi_read_inode(c, name, tag, inode, true);
+	if (ret != SD_RES_SUCCESS) {
+		fprintf(stderr, "Read inode for VDI %s failed: %s\n",
+				name, sd_strerr(ret));
+		return ret;
+	}
+
+	ret = sd_vdi_delete(c, name, NULL);
+	if (ret != SD_RES_SUCCESS) {
+		fprintf(stderr, "Failed to delete current VDI state: %s\n",
+				sd_strerr(ret));
+		return ret;
+	}
+
+	ret = do_vdi_create(c, name, inode->vdi_size, inode->vdi_id,
+				NULL, false, inode->store_policy);
+
+	if (ret != SD_RES_SUCCESS) {
+		fprintf(stderr, "Failed to rollback VDI: %s\n",
+				sd_strerr(ret));
+		return ret;
+	}
+
+	return SD_RES_SUCCESS;
+}
