@@ -499,9 +499,9 @@ uint8_t local_ec_index(struct vnode_info *vinfo, uint64_t oid);
 static inline bool is_data_vid_update(const struct sd_req *hdr)
 {
 	return is_vdi_obj(hdr->obj.oid) &&
-		data_vid_offset(0) <= hdr->obj.offset &&
+		offsetof(struct sd_inode, data_vdi_id[0]) <= hdr->obj.offset &&
 		hdr->obj.offset + hdr->data_length <=
-			data_vid_offset(SD_INODE_DATA_INDEX);
+		offsetof(struct sd_inode, data_vdi_id[SD_INODE_DATA_INDEX]);
 }
 
 /* object_cache */
