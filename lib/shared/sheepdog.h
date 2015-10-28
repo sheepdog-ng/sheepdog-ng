@@ -11,6 +11,10 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifndef SHEEPDOG_H_
 #define SHEEPDOG_H_
 
@@ -247,4 +251,8 @@ int sd_vdi_resize(struct sd_cluster *c, char *name, uint64_t new_size);
  */
 int sd_vdi_rollback(struct sd_cluster *c, char *name, char *tag);
 
+#endif
+
+#ifdef __cplusplus
+}
 #endif

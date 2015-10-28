@@ -67,24 +67,24 @@ static inline bool list_linked(const struct list_node *node)
 						   typeof(*LOCAL(n)),	\
 						   member))
 
-static inline void __list_add(struct list_node *new,
+static inline void __list_add(struct list_node *one,
 			      struct list_node *prev,
 			      struct list_node *next)
 {
-	next->prev = new;
-	new->next = next;
-	new->prev = prev;
-	prev->next = new;
+	next->prev = one;
+	one->next = next;
+	one->prev = prev;
+	prev->next = one;
 }
 
-static inline void list_add(struct list_node *new, struct list_head *head)
+static inline void list_add(struct list_node *one, struct list_head *head)
 {
-	__list_add(new, &head->n, head->n.next);
+	__list_add(one, &head->n, head->n.next);
 }
 
-static inline void list_add_tail(struct list_node *new, struct list_head *head)
+static inline void list_add_tail(struct list_node *one, struct list_head *head)
 {
-	__list_add(new, head->n.prev, &head->n);
+	__list_add(one, head->n.prev, &head->n);
 }
 
 static inline void __list_del(struct list_node *prev, struct list_node *next)
@@ -151,9 +151,6 @@ static inline void list_splice_tail_init(struct list_head *list,
 
 /* hlist, mostly useful for hash tables */
 
-#define LIST_POISON1 ((void *) 0x00100100)
-#define LIST_POISON2 ((void *) 0x00200200)
-
 struct hlist_head {
 	struct hlist_node *first;
 };
@@ -161,6 +158,9 @@ struct hlist_head {
 struct hlist_node {
 	struct hlist_node *next, **pprev;
 };
+
+#define LIST_POISON1 ((struct hlist_node *) 0x00100100)
+#define LIST_POISON2 ((struct hlist_node **) 0x00200200)
 
 #define HLIST_HEAD_INIT { .first = NULL }
 #define HLIST_HEAD(name) struct hlist_head name = {  .first = NULL }
