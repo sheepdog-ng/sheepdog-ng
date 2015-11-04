@@ -437,8 +437,8 @@ again:
 		}
 		ret = rsp->result;
 		if (ret != SD_RES_SUCCESS) {
-			sd_err("fail %"PRIx64", %s", req->rq.obj.oid,
-			       sd_strerror(ret));
+			sd_debug("fail %"PRIx64", %s", req->rq.obj.oid,
+				 sd_strerror(ret));
 			err_ret = ret;
 		}
 		finish_one_entry(fi, i);

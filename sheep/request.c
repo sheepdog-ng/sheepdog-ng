@@ -38,6 +38,7 @@ static bool is_access_local(struct request *req, uint64_t oid)
 static void io_op_done(struct work *work)
 {
 	struct request *req = container_of(work, struct request, work);
+	struct sd_req *hdr = &req->rq;
 
 	switch (req->rp.result) {
 	case SD_RES_EIO:
@@ -50,7 +51,8 @@ static void io_op_done(struct work *work)
 	case SD_RES_NETWORK_ERROR:
 		break;
 	default:
-		sd_debug("unhandled error %s", sd_strerror(req->rp.result));
+		sd_debug("unhandled error %s, oid %"PRIx64,
+			 sd_strerror(req->rp.result), hdr->obj.oid);
 		break;
 	}
 
@@ -120,7 +122,12 @@ static void gateway_op_done(struct work *work)
 	case SD_RES_SUCCESS:
 		break;
 	default:
-		sd_debug("unhandled error %s", sd_strerror(req->rp.result));
+		if (req->local)
+			sd_debug("unhandled error %s, oid %"PRIx64,
+				 sd_strerror(req->rp.result), hdr->obj.oid);
+		else
+			sd_err("unhandled error %s, oid %"PRIx64,
+			       sd_strerror(req->rp.result), hdr->obj.oid);
 		break;
 	}
 
@@ -1132,10 +1139,10 @@ worker_fn int sheep_exec_req(const struct node_id *nid, struct sd_req *hdr,
 	}
 	ret = rsp->result;
 	if (ret != SD_RES_SUCCESS)
-		sd_warn("failed %s, remote address: %s, op name: %s",
-				sd_strerror(ret),
-				addr_to_str(nid->addr, nid->port),
-				op_name(get_sd_op(hdr->opcode)));
+		sd_debug("failed %s, remote address: %s, op name: %s",
+			 sd_strerror(ret),
+			 addr_to_str(nid->addr, nid->port),
+			 op_name(get_sd_op(hdr->opcode)));
 
 	sockfd_cache_put(nid, sfd);
 	return ret;
