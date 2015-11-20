@@ -154,6 +154,7 @@ static int do_kill(int argc, char **argv)
 {
 	char *path;
 	clientid_t cid;
+	zhandle_t* new_handle;
 	int len = sizeof(clientid_t), rc;
 
 	if (argc != 3) {
@@ -162,15 +163,12 @@ static int do_kill(int argc, char **argv)
 	}
 
 	path = argv[2];
-
-	while (zoo_state(zk_handle) != ZOO_CONNECTED_STATE)
-		;
-
 	rc = zoo_get(zk_handle, path, 0, (char *)&cid, &len, NULL);
 	switch (rc) {
 	case ZOK:
 		break;
 	case ZNONODE:
+		printf("no node %s\n", path);
 		return 0;
 	default:
 		fprintf(stderr, "failed to get data for %s, %s\n", path,
@@ -178,15 +176,21 @@ static int do_kill(int argc, char **argv)
 		return -1;
 	}
 
-	zk_handle = zookeeper_init(hosts, NULL, 1000, &cid, NULL, 0);
-
-	if (!zk_handle) {
+	new_handle = zookeeper_init(hosts, NULL, 1000, &cid, NULL, 0);
+	if (!new_handle) {
 		fprintf(stderr, "failed to re-init zookeeper\n");
 		return -1;
 	}
 
-	while (zoo_state(zk_handle) != ZOO_CONNECTED_STATE)
+	while (zoo_state(new_handle) != ZOO_CONNECTED_STATE)
 		;
+	rc = zookeeper_close(new_handle);
+	if (rc != ZOK) {
+		fprintf(stderr, "failed to close session %s, %s\n", path,
+			zerror(rc));
+		return -1;
+	}
+
 	return 0;
 }
 
@@ -612,6 +616,9 @@ int main(int argc, char **argv)
 		fprintf(stderr, "failed to init zookeeper\n");
 		exit(1);
 	}
+
+	while (zoo_state(zk_handle) != ZOO_CONNECTED_STATE)
+		;
 
 	if (cmd->execute(nr_arg, argp) < 0)
 		fprintf(stderr, "%s failed\n", cmd->name);
