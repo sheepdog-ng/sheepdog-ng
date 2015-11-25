@@ -219,12 +219,12 @@ static int node_recovery(int argc, char **argv)
 			const char *host = addr_to_str(n->nid.addr,
 						       n->nid.port);
 			if (raw_output)
-				printf("%d %s %d %d %"PRIu64" %"PRIu64"\n", i,
+				printf("%d %s %d %u %"PRIu64" %"PRIu64"\n", i,
 				       host, n->nr_vnodes,
 				       n->zone, state.nr_finished,
 				       state.nr_total);
 			else
-				printf("%4d   %-20s%5d%11d%11.1f%%\n", i, host,
+				printf("%4d   %-20s%5d%11u%11.1f%%\n", i, host,
 				       n->nr_vnodes, n->zone,
 				       100 * (float)state.nr_finished
 				       / state.nr_total);
