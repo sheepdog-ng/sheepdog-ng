@@ -1291,6 +1291,13 @@ static void zk_event_handler(int listen_fd, int events, void *data)
 		exit(1);
 	}
 
+	/* Some mad kernel return us this event, we'd better leave mad man */
+	if (events & EPOLLOUT) {
+		sd_err("zookeeper driver received EPOLLOUT event, exiting.");
+		log_close();
+		exit(1);
+	}
+
 	eventfd_xread(efd);
 
 	if (zoo_state(zhandle) == ZOO_EXPIRED_SESSION_STATE) {
