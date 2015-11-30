@@ -638,8 +638,8 @@ void wait_get_vdi_bitmap_done(void)
 }
 
 static bool membership_changed(const struct cluster_info *cinfo,
-			  const struct rb_root *nroot,
-			  size_t nr_nodes)
+			       const struct rb_root *nroot,
+			       size_t nr_nodes)
 {
 	const struct sd_node *key, *n;
 	int i, ret;
@@ -706,8 +706,16 @@ static void update_cluster_info(const struct cluster_info *cinfo,
 				panic("cannot log current epoch %d",
 				      sys->cinfo.epoch);
 
-			start_recovery(main_thread_get(current_vnode_info),
-				       old_vnode_info, true);
+			/*
+			 * If vnode ring not changed, we don't need to start
+			 * recovery. If node is in recovery, we have to start
+			 * recovery to replace the last one to keep the epoch
+			 * up to date.
+			 */
+			if (joined->nr_vnodes || node_in_recovery())
+				start_recovery(
+					main_thread_get(current_vnode_info),
+					       old_vnode_info, true);
 		} else if (!was_cluster_shutdowned()) {
 			start_recovery(main_thread_get(current_vnode_info),
 				       main_thread_get(current_vnode_info),
@@ -994,8 +1002,9 @@ main_fn void sd_leave_handler(const struct sd_node *left,
 		ret = inc_and_log_epoch();
 		if (ret != 0)
 			panic("cannot log current epoch %d", sys->cinfo.epoch);
-		start_recovery(main_thread_get(current_vnode_info),
-			       old_vnode_info, true);
+		if (left->nr_vnodes || node_in_recovery())
+			start_recovery(main_thread_get(current_vnode_info),
+				       old_vnode_info, true);
 	}
 
 	put_vnode_info(old_vnode_info);
