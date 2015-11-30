@@ -1,0 +1,46 @@
+#!/bin/bash
+
+# Test node events with vnodes unchanged
+
+. ./common
+
+for i in `seq 0 2`; do
+    _start_sheep $i
+done
+
+_wait_for_sheep 3
+
+_cluster_format -c 2
+
+$DOG vdi create test 100M
+_random | $DOG vdi write test
+
+for i in `seq 3 6`; do
+    _start_sheep $i -g
+done
+
+_wait_for_sheep 7
+
+$DOG vdi check test
+
+_kill_sheep 3
+_wait_for_sheep 6
+
+grep recovery $STORE/0/sheep.log
+
+_kill_sheep 1
+_kill_sheep 2
+_kill_sheep 4
+_kill_sheep 6
+_wait_for_sheep 2
+
+_start_sheep 2
+_wait_for_sheep 3
+
+if [ "`grep identical $STORE/0/sheep.log`" ]; then
+    echo "Yes, we did skip the identical epoch"
+fi
+
+$DOG vdi check test
+$DOG node list
+

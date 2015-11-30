@@ -1,0 +1,9 @@
+QA output created by 103
+using backend plain store
+finish check&repair test
+Yes, we did skip the identical epoch
+finish check&repair test
+  Id   Host:Port         V-Nodes       Zone
+   0   127.0.0.1:7000      	128          0
+   1   127.0.0.1:7002      	128          2
+   2   127.0.0.1:7005      	 0          5
