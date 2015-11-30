@@ -14,6 +14,7 @@ struct rb_node {
 
 struct rb_root {
 	struct rb_node *rb_node;
+	unsigned long nr;
 };
 
 
@@ -33,10 +34,11 @@ static inline void rb_set_color(struct rb_node *rb, int color)
 	rb->rb_parent_color = (rb->rb_parent_color & ~1) | color;
 }
 
-#define RB_ROOT { .rb_node = NULL }
+#define RB_ROOT { .rb_node = NULL, .nr = 0 }
 static inline void INIT_RB_ROOT(struct rb_root *root)
 {
 	root->rb_node = NULL;
+	root->nr = 0;
 }
 
 #define rb_entry(ptr, type, member) container_of(ptr, type, member)
@@ -125,6 +127,7 @@ static inline void rb_link_node(struct rb_node *node, struct rb_node *parent,
 	}								\
 									\
 	if (__old == NULL) {						\
+		(root)->nr++;						\
 		/* Add new node and rebalance tree. */			\
 		rb_link_node(&((new)->member), __parent, __n);		\
 		rb_insert_color(&((new)->member), root);		\
@@ -196,6 +199,22 @@ static inline void rb_link_node(struct rb_node *node, struct rb_node *parent,
 		*__dst = *__src;					\
 		rb_insert(outroot, __dst, member, compar);		\
 	}								\
+})
+
+#define rb_identical(root1, type, member, root2, compar)		\
+({									\
+	type *__key;							\
+	bool __yes = false;						\
+	if ((root1)->nr == (root2)->nr)	{				\
+		__yes = true;						\
+		rb_for_each_entry(__key, root1, member) {		\
+			if (!rb_search(root2, __key, member, compar)) { \
+				__yes = false;				\
+				break;					\
+			}						\
+		}							\
+	}								\
+	__yes;								\
 })
 
 #endif /* __RBTREE_H_ */

@@ -249,6 +249,7 @@ void rb_erase(struct rb_node *node, struct rb_root *root)
  color:
 	if (color == RB_BLACK)
 		__rb_erase_color(child, parent, root);
+	root->nr--;
 }
 
 /* This function returns the first node (in sort order) of the tree. */

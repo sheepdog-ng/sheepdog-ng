@@ -219,6 +219,12 @@ rollback:
 			buf = NULL;
 			goto done;
 		}
+		if (rb_identical(&new_old->vroot, struct sd_vnode, rb,
+				 &old->vroot, vnode_cmp)) {
+			sd_debug("skip the identical epoch %"PRIu32, tgt_epoch);
+			put_vnode_info(new_old);
+			goto rollback;
+		}
 		put_vnode_info(old);
 		old = new_old;
 		goto again;
@@ -374,6 +380,7 @@ again:
 		sd_alert("clients may see old data");
 		/* fall through */
 	default:
+rollback:
 		/* No luck, roll back to an older configuration and try again */
 		new_old = rollback_vnode_info(&tgt_epoch, rw->rinfo,
 					      rw->cur_vinfo);
@@ -382,7 +389,12 @@ again:
 			ret = -1;
 			goto out;
 		}
-
+		if (rb_identical(&new_old->vroot, struct sd_vnode, rb,
+				 &old->vroot, vnode_cmp)) {
+			sd_debug("skip the identical epoch %"PRIu32, tgt_epoch);
+			put_vnode_info(new_old);
+			goto rollback;
+		}
 		put_vnode_info(old);
 		old = new_old;
 		goto again;
