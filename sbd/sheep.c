@@ -669,6 +669,12 @@ int sheep_handle_reply(struct sbd_device *dev)
 		}
 	}
 
+	if (rsp.result != SD_RES_SUCCESS) {
+		pr_err("I/O request failed: %d", rsp.result);
+		req->aiocb->ret = EIO;
+		goto end_request;
+	}
+
 	switch (req->type) {
 	case SHEEP_CREATE:
 		/* We need to update inode for create */
