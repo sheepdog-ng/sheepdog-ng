@@ -90,8 +90,7 @@ static inline bool node_is_gateway_only(void)
 
 static struct vnode_info *rollback_vnode_info(uint32_t *epoch,
 					      struct recovery_info *rinfo,
-					      struct vnode_info *cur,
-					      bool ec)
+					      struct vnode_info *cur)
 {
 	struct sd_node nodes[SD_MAX_NODES];
 	int nr_nodes;
@@ -213,7 +212,7 @@ again:
 	default:
 rollback:
 		new_old = rollback_vnode_info(&tgt_epoch, rw->rinfo,
-					      rw->cur_vinfo, true);
+					      rw->cur_vinfo);
 		if (!new_old) {
 			sd_warn("can not read %"PRIx64" idx %d", oid, idx);
 			free(buf);
@@ -377,7 +376,7 @@ again:
 	default:
 		/* No luck, roll back to an older configuration and try again */
 		new_old = rollback_vnode_info(&tgt_epoch, rw->rinfo,
-					      rw->cur_vinfo, false);
+					      rw->cur_vinfo);
 		if (!new_old) {
 			sd_err("can not recover oid %"PRIx64, oid);
 			ret = -1;
