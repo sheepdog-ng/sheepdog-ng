@@ -1264,6 +1264,7 @@ static const int zk_max_event_handlers = ARRAY_SIZE(zk_event_handlers);
 static inline void handle_session_expire(void)
 {
 	/* clean memory states */
+	unregister_event(efd);
 	close(efd);
 	zk_tree_destroy();
 	INIT_RB_ROOT(&zk_node_root);
