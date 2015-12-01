@@ -697,8 +697,8 @@ int gateway_write_object(struct request *req)
 		size_t nr_vids = hdr->data_length / sizeof(*vids);
 
 		/* read the previous vids to discard their references later */
-		vids = xzalloc(sizeof(*vids) * nr_vids);
-		refs = xzalloc(sizeof(*refs) * nr_vids);
+		vids = xvalloc(sizeof(*vids) * nr_vids);
+		refs = xvalloc(sizeof(*refs) * nr_vids);
 		ret = prepare_object_refcnt(hdr, vids, refs);
 		if (ret != SD_RES_SUCCESS)
 			goto out;
