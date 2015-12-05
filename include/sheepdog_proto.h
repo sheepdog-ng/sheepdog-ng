@@ -25,10 +25,11 @@
 #include <linux/limits.h>
 #include <stddef.h>
 
-#define SD_PROTO_VER 0x02
-
-/* This or later version supports trimming zero sectors from read response */
-#define SD_PROTO_VER_TRIM_ZERO_SECTORS 0x02
+/*
+ * Don't increment it because both QEMU and STGT define it as 0x01. Now we use
+ * it as a magic number for valid header from QEMU or STGT.
+ */
+#define SD_PROTO_VER 0x01
 
 #define SD_LISTEN_PORT 7000
 
@@ -124,7 +125,6 @@
 #define SD_INODE_HEADER_SIZE offsetof(struct sd_inode, data_vdi_id)
 #define SD_ATTR_OBJ_SIZE (sizeof(struct sheepdog_vdi_attr))
 #define SD_LEDGER_OBJ_SIZE (UINT64_C(1) << 22)
-#define CURRENT_VDI_ID 0
 
 #define STORE_LEN 16
 

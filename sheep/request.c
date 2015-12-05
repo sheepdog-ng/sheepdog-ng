@@ -433,23 +433,6 @@ static void queue_request(struct request *req)
 	struct sd_req *hdr = &req->rq;
 	struct sd_rsp *rsp = &req->rp;
 
-	/*
-	 * Check the protocol version for all internal commands, and public
-	 * commands that have it set.  We can't enforce it on all public
-	 * ones as it isn't a mandatory part of the public protocol.
-	 */
-	if (hdr->opcode >= 0x80) {
-		if (hdr->proto_ver != SD_SHEEP_PROTO_VER) {
-			rsp->result = SD_RES_VER_MISMATCH;
-			goto done;
-		}
-	} else if (hdr->proto_ver) {
-		if (hdr->proto_ver > SD_PROTO_VER) {
-			rsp->result = SD_RES_VER_MISMATCH;
-			goto done;
-		}
-	}
-
 	req->op = get_sd_op(hdr->opcode);
 	if (!req->op) {
 		sd_err("invalid opcode %d", hdr->opcode);
@@ -737,6 +720,62 @@ main_fn void get_request(struct request *req)
 	refcount_inc(&req->refcnt);
 }
 
+static inline bool check_hdr(struct sd_req *hdr)
+{
+	bool ret = true;
+
+	if (unlikely(!get_sd_op(hdr->opcode)))
+		return false;
+
+	if (unlikely(hdr->flags & ~(SD_FLAG_CMD_ALL)))
+		return false;
+
+	switch (hdr->proto_ver) {
+	case 0 ... SD_PROTO_VER:
+		/*
+		 * Client req's proto_ver can be either 0 or SD_PROTO_VER
+		 * but epoch should be 0
+		 */
+		if (unlikely(hdr->opcode >= 0x80 || hdr->epoch != 0))
+			ret = false;
+		break;
+	case SD_SHEEP_PROTO_VER:
+		/* ALl the sheepdog internal reqs set SD_SHEEP_PROTO_VER */
+		if (unlikely(hdr->opcode < 0x80))
+			ret = false;
+		break;
+	default:
+		ret = false;
+		break;
+	}
+
+	/*
+	 * Bad read/write requests would cause gateway to forward requests with
+	 * zero data stream, which would fail as expected but gateway would
+	 * repeat the failure forever. So we should try our best to screen out
+	 * bad IO gateway reqeusts.
+	 */
+	switch (hdr->opcode) {
+	case SD_OP_CREATE_AND_WRITE_OBJ:
+	case SD_OP_WRITE_OBJ:
+		if (unlikely(!(hdr->flags & SD_FLAG_CMD_WRITE))) {
+			ret = false;
+			break;
+		}
+		/* fall thru */
+	case SD_OP_READ_OBJ:
+		if (unlikely(hdr->data_length > SD_INODE_SIZE)) {
+			sd_debug("bad length %"PRIu32, hdr->data_length);
+			ret = false;
+		}
+		break;
+	default:
+		break;
+	}
+
+	return ret;
+}
+
 static void rx_work(struct work *work)
 {
 	struct client_info *ci = container_of(work, struct client_info,
@@ -749,6 +788,15 @@ static void rx_work(struct work *work)
 	ret = do_read(conn->fd, &hdr, sizeof(hdr), NULL, 0, UINT32_MAX);
 	if (ret) {
 		sd_debug("failed to read a header");
+		conn->dead = true;
+		return;
+	}
+
+	if (unlikely(!check_hdr(&hdr))) {
+		sd_err("found bad data stream, close the connection %s:%d",
+		       ci->conn.ipstr, ci->conn.port);
+		sd_err("ver %d, op %x, flags %d, epoch %"PRIu32, hdr.proto_ver,
+		       hdr.opcode, hdr.flags, hdr.epoch);
 		conn->dead = true;
 		return;
 	}

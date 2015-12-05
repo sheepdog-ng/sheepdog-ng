@@ -481,7 +481,6 @@ static int get_vdi_bitmap_from(struct sd_node *node)
 
 	sd_init_req(&hdr, SD_OP_READ_VDIS);
 	hdr.data_length = rlen;
-	hdr.epoch = sys_epoch();
 	ret = sheep_exec_req(&node->nid, &hdr, (char *)tmp_vdi_inuse);
 	if (ret != SD_RES_SUCCESS)
 		return ret;

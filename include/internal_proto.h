@@ -121,6 +121,12 @@
 #define SD_FLAG_CMD_EXCL     0x0200
 #define SD_FLAG_CMD_DEL      0x0400
 
+#define SD_FLAG_CMD_ALL (SD_FLAG_CMD_WRITE | SD_FLAG_CMD_COW | \
+			 SD_FLAG_CMD_CACHE | SD_FLAG_CMD_DIRECT | \
+			 SD_FLAG_CMD_PIGGYBACK | SD_FLAG_CMD_RECOVERY | \
+			 SD_FLAG_CMD_CREAT | SD_FLAG_CMD_EXCL | \
+			 SD_FLAG_CMD_DEL)
+
 /* internal error return values, must be above 0x80 */
 #define SD_RES_OLD_NODE_VER  0x81 /* Request has an old epoch */
 #define SD_RES_NEW_NODE_VER  0x82 /* Request has a new epoch */
