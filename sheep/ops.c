@@ -636,25 +636,6 @@ err:
 	panic("failed in force recovery");
 }
 
-static int cluster_cleanup(const struct sd_req *req, struct sd_rsp *rsp,
-			   void *data, const struct sd_node *sender)
-{
-	int ret;
-
-	if (node_in_recovery())
-		return SD_RES_NODE_IN_RECOVERY;
-
-	if (sys->gateway_only)
-		return SD_RES_SUCCESS;
-
-	if (sd_store->cleanup)
-		ret = sd_store->cleanup();
-	else
-		ret = SD_RES_NO_SUPPORT;
-
-	return ret;
-}
-
 static int cluster_notify_vdi_add(const struct sd_req *req, struct sd_rsp *rsp,
 				  void *data, const struct sd_node *sender)
 {
@@ -1216,13 +1197,6 @@ static struct sd_op_template sd_ops[] = {
 		.is_admin_op = true,
 		.process_work = cluster_force_recover_work,
 		.process_main = cluster_force_recover_main,
-	},
-
-	[SD_OP_CLEANUP] = {
-		.name = "CLEANUP",
-		.type = SD_OP_TYPE_CLUSTER,
-		.force = true,
-		.process_main = cluster_cleanup,
 	},
 
 	[SD_OP_NOTIFY_VDI_ADD] = {
