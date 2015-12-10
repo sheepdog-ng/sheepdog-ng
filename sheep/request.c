@@ -444,8 +444,6 @@ static void queue_request(struct request *req)
 
 	switch (sys->cinfo.status) {
 	case SD_STATUS_KILLED:
-		rsp->result = SD_RES_KILLED;
-		goto done;
 	case SD_STATUS_SHUTDOWN:
 		rsp->result = SD_RES_SHUTDOWN;
 		goto done;
