@@ -1115,6 +1115,7 @@ void unregister_listening_fds(void)
 	list_for_each_entry(fd, &listening_fd_list, list) {
 		sd_debug("unregistering fd: %d", fd->fd);
 		unregister_event(fd->fd);
+		close(fd->fd);
 	}
 }
 
