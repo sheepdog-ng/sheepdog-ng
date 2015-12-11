@@ -190,7 +190,7 @@ int get_obj_list(const struct sd_req *hdr, struct sd_rsp *rsp, void *data)
 out:
 	if (hdr->data_length < obj_list_cache.cache_size * sizeof(uint64_t)) {
 		sd_rw_unlock(&obj_list_cache.lock);
-		sd_err("GET_OBJ_LIST buffer too small");
+		sd_debug("GET_OBJ_LIST buffer too small");
 		return SD_RES_BUFFER_SMALL;
 	}
 
