@@ -591,6 +591,27 @@ static inline bool md_access(const char *path)
 	return true;
 }
 
+#define NANO_SECOND_MULTIPLIER  (10000000UL) // 10 millisecond
+static inline int wait_path_ready(const char *path)
+{
+	struct timespec ts;
+	int retries = 0;
+	unsigned long timeout = 3000 * NANO_SECOND_MULTIPLIER; /* 30s */
+
+	ts.tv_sec = 0;
+	ts.tv_nsec = NANO_SECOND_MULTIPLIER;
+
+	do {
+		if(nanosleep(&ts, NULL) >= 0)
+			retries++;
+
+		if(md_access(path))
+			return 0;
+	} while (retries * NANO_SECOND_MULTIPLIER <= timeout);
+
+	return -1; // timeout
+}
+
 static int get_old_new_path(uint64_t oid, uint32_t epoch, uint8_t ec_index,
 			    const char *path, char *old, char *new)
 {
@@ -654,6 +675,13 @@ static int md_move_object(uint64_t oid, const char *old, const char *new)
 			sd_err("failed to create %s", new);
 			ret = -1;
 			goto out_close;
+		}
+		else {
+			if (wait_path_ready(new) < 0) {
+				sd_err("file %s still not ready after timeout", new);
+				ret = -1;
+				goto out_close;
+			}
 		}
 	}
 	unlink(old);
