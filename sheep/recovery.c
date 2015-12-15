@@ -67,6 +67,8 @@ struct recovery_info {
 	int max_epoch;
 	struct vnode_info **vinfo_array;
 	struct sd_mutex vinfo_lock;
+
+	uint32_t recover_threads;
 };
 
 static struct recovery_info *next_rinfo;
@@ -681,7 +683,7 @@ static inline bool run_next_rw(void)
 		return false;
 
 	/* Some objects are still in recovery. */
-	if (cur->done < cur->next) {
+	if (cur->recover_threads) {
 		sd_debug("some threads still running, wait for completion");
 		return true;
 	}
@@ -818,6 +820,7 @@ static void recover_next_object(struct recovery_info *rinfo)
 	/* Try recover next object */
 	queue_recovery_work(rinfo);
 	rinfo->next++;
+	rinfo->recover_threads++;
 }
 
 static void recover_object_main(struct work *work)
@@ -828,6 +831,8 @@ static void recover_object_main(struct work *work)
 						     struct recovery_obj_work,
 						     base);
 	struct recovery_info *rinfo = main_thread_get(current_rinfo);
+
+	rinfo->recover_threads--;
 
 	/* ->oids[done, next] is out of order since finish order is random */
 	if (rinfo->oids[rinfo->done] != row->oid) {
