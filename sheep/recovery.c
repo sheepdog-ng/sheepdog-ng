@@ -834,6 +834,10 @@ static void recover_object_main(struct work *work)
 
 	rinfo->recover_threads--;
 
+	/* if recovery is stopped, there is no reason to mark it as recovered */
+	if (row->stop == true)
+		goto skip;
+
 	/* ->oids[done, next] is out of order since finish order is random */
 	if (rinfo->oids[rinfo->done] != row->oid) {
 		uint64_t *p = xlfind(&row->oid, rinfo->oids + rinfo->done,
@@ -844,6 +848,7 @@ static void recover_object_main(struct work *work)
 	}
 	rinfo->done++;
 
+skip:
 	if (run_next_rw()) {
 		free_recovery_obj_work(row);
 		return;
