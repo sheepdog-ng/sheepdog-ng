@@ -45,7 +45,7 @@ union instruction {
 
 static int caller_cmp(const struct caller *a, const struct caller *b)
 {
-	return intcmp(a->mcount, b->mcount);
+	return intcmp(a->fentry, b->fentry);
 }
 
 static unsigned char *get_new_call(unsigned long ip, unsigned long addr)
@@ -76,7 +76,7 @@ static int make_text_writable(unsigned long ip)
 static struct caller *trace_lookup_ip(unsigned long ip)
 {
 	const struct caller key = {
-		.mcount = ip,
+		.fentry = ip,
 	};
 
 	return xbsearch(&key, callers, nr_callers, caller_cmp);
@@ -90,13 +90,13 @@ void regist_tracer(struct tracer *tracer)
 static void patch_all_sites(unsigned long addr)
 {
 	for (int i = 0; i < nr_callers; i++)
-		replace_call(callers[i].mcount, addr);
+		replace_call(callers[i].fentry, addr);
 }
 
 static void nop_all_sites(void)
 {
 	for (int i = 0; i < nr_callers; i++)
-		memcpy((void *)callers[i].mcount, NOP5, INSN_SIZE);
+		memcpy((void *)callers[i].fentry, NOP5, INSN_SIZE);
 }
 
 /* the entry point of the function */
@@ -291,31 +291,22 @@ void trace_buffer_push(int cpuid, struct trace_graph_item *item)
 	sd_mutex_unlock(&buffer_lock[cpuid]);
 }
 
-/* assume that mcount call exists in the first FIND_MCOUNT_RANGE bytes */
-#define FIND_MCOUNT_RANGE 32
-
-static unsigned long find_mcount_call(unsigned long entry_addr)
+/* __fentry__ call should always be the first instruction */
+static unsigned long find_fentry_call(unsigned long entry_addr)
 {
-	unsigned long start = entry_addr;
-	unsigned long end = entry_addr + FIND_MCOUNT_RANGE;
+    union instruction *code;
+    unsigned long addr;
 
-	while (start < end) {
-		union instruction *code;
-		unsigned long addr;
+    /* 0xe8 means a opcode of call */
+    code = memchr((void *)entry_addr, 0xe8, sizeof(char));
+    addr = (unsigned long)code;
 
-		/* 0xe8 means a opcode of call */
-		code = memchr((void *)start, 0xe8, end - start);
-		addr = (unsigned long)code;
+    if (code == NULL)
+        return 0;
 
-		if (code == NULL)
-			break;
-
-		if ((int)((unsigned long)mcount - addr - INSN_SIZE) ==
-		    code->offset)
-			return addr;
-
-		start = addr + 1;
-	}
+    if ((int)((unsigned long)__fentry__ - addr - INSN_SIZE) ==
+        code->offset)
+        return addr;
 
 	return 0;
 }
@@ -344,7 +335,7 @@ static bfd *get_bfd(void)
 	return abfd;
 }
 
-/* Create a caller list which has a mcount call. */
+/* Create a caller list which has a fentry call. */
 static int init_callers(void)
 {
 	int max_symtab_size;
@@ -377,16 +368,16 @@ static int init_callers(void)
 			/* sym is not a function */
 			continue;
 
-		ip = find_mcount_call(addr);
+		ip = find_fentry_call(addr);
 		if (ip == 0) {
-			sd_debug("%s doesn't have mcount call", name);
+			sd_debug("%s doesn't have fentry call", name);
 			continue;
 		}
 		if (make_text_writable(ip) < 0)
-			panic("failed to make mcount call writable");
+			panic("failed to make fentry call writable");
 
 		callers[nr_callers].addr = addr;
-		callers[nr_callers].mcount = ip;
+		callers[nr_callers].fentry = ip;
 		callers[nr_callers].name = strdup(name);
 		callers[nr_callers].section = strdup(section);
 		nr_callers++;
@@ -400,7 +391,7 @@ static int init_callers(void)
 }
 
 /*
- * Try to NOP all the mcount call sites that are supposed to be traced.  Later
+ * Try to NOP all the fentry call sites that are supposed to be traced.  Later
  * we can enable it by asking these sites to point to trace_caller.
  */
 int trace_init(void)

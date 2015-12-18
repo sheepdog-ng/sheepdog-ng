@@ -477,9 +477,10 @@ else
 fi
 
 if test "x${enable_trace}" = xyes && \
-		cc_supports_flag -pg ; then
-	AC_MSG_NOTICE([Enabling trace (-pg)])
-	TRACE_CFLAGS="-pg"
+		cc_supports_flag -pg && \
+        cc_supports_flag -mfentry; then
+	AC_MSG_NOTICE([Enabling trace (-pg -mfentry)])
+	TRACE_CFLAGS="-pg -mfentry"
 else
 	TRACE_CFLAGS=""
 fi

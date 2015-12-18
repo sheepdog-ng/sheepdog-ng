@@ -30,7 +30,7 @@ ENTRY(trace_caller)
 	movq %r9, 48(%rsp)
 
 	movq 0x38(%rsp), %rdi
-	leaq 8(%rbp), %rsi
+	leaq 0x40(%rsp), %rsi
 	subq $INSN_SIZE, %rdi
 
 	call trace_function_enter

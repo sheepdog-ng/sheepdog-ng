@@ -9,7 +9,7 @@
 
 struct caller {
 	unsigned long addr;
-	unsigned long mcount;
+	unsigned long fentry;
 	const char *name;
 	const char *section;
 };
@@ -28,8 +28,10 @@ struct tracer {
 
 #define SD_MAX_STACK_DEPTH 1024
 
+/* gcc defined*/
+void __fentry__(void);
+
 /* mcount.S */
-void mcount(void);
 void trace_caller(void);
 void trace_return_caller(void);
 void trace_function_enter(unsigned long, unsigned long *);
