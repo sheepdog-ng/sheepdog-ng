@@ -53,8 +53,7 @@ struct sd_op_template {
 			    void *data, const struct sd_node *sender);
 };
 
-static int stat_sheep(uint64_t *store_size, uint64_t *store_free,
-		      uint32_t epoch)
+static int stat_sheep(uint64_t *store_size, uint64_t *store_free)
 {
 	uint64_t used;
 
@@ -442,9 +441,8 @@ static int local_read_vdis(const struct sd_req *req, struct sd_rsp *rsp,
 static int local_stat_sheep(struct request *req)
 {
 	struct sd_rsp *rsp = &req->rp;
-	uint32_t epoch = req->rq.epoch;
 
-	return stat_sheep(&rsp->node.store_size, &rsp->node.store_free, epoch);
+	return stat_sheep(&rsp->node.store_size, &rsp->node.store_free);
 }
 
 static int local_stat_recovery(const struct sd_req *req, struct sd_rsp *rsp,
