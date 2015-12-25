@@ -259,7 +259,7 @@ int sd_vdi_close(struct sd_vdi *vdi)
 		return ret;
 	}
 	free_vdi(vdi);
-	return 0;
+	return ret;
 }
 
 static int do_vdi_create(struct sd_cluster *c, char *name, uint64_t vdi_size,
