@@ -408,7 +408,7 @@ static int create_work_queues(void)
 	sys->gateway_wqueue = create_work_queue("gway", WQ_UNLIMITED);
 	sys->io_wqueue = create_work_queue("io", WQ_UNLIMITED);
 	sys->recovery_wqueue = create_work_queue("rw", WQ_UNLIMITED);
-	sys->deletion_wqueue = create_ordered_work_queue("deletion");
+	sys->deletion_wqueue = create_work_queue("delete", WQ_DYNAMIC);
 	sys->block_wqueue = create_ordered_work_queue("block");
 	sys->md_wqueue = create_ordered_work_queue("md");
 	sys->areq_wqueue = create_work_queue("async_req", WQ_UNLIMITED);
