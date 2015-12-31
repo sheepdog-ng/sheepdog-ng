@@ -376,6 +376,8 @@ again:
 	case SD_RES_OLD_NODE_VER:
 		row->stop = true;
 		break;
+	case SD_RES_NO_SPACE:
+		break;
 	case SD_RES_STALE_OBJ:
 		sd_alert("cannot access any replicas of %"PRIx64" at epoch %d",
 			 oid, tgt_epoch);
