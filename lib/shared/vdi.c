@@ -20,6 +20,7 @@ static int lock_vdi(struct sd_vdi *vdi)
 	int ret;
 
 	hdr.opcode = SD_OP_LOCK_VDI;
+	hdr.proto_ver = SD_PROTO_VER;
 	hdr.data_length = SD_MAX_VDI_LEN;
 	hdr.flags = SD_FLAG_CMD_WRITE;
 	ret = sd_run_sdreq(vdi->c, &hdr, vdi->name);
@@ -33,6 +34,7 @@ static int unlock_vdi(struct sd_vdi *vdi)
 	int ret;
 
 	hdr.opcode = SD_OP_RELEASE_VDI;
+	hdr.proto_ver = SD_PROTO_VER;
 	hdr.vdi.type = LOCK_TYPE_NORMAL;
 	hdr.vdi.base_vdi_id = vdi->vid;
 	ret = sd_run_sdreq(vdi->c, &hdr, NULL);
@@ -74,6 +76,7 @@ static int find_vdi(struct sd_cluster *c, char *name,
 		pstrcpy(buf + SD_MAX_VDI_LEN, SD_MAX_VDI_TAG_LEN, tag);
 
 	hdr.opcode = SD_OP_GET_VDI_INFO;
+	hdr.proto_ver = SD_PROTO_VER;
 	hdr.data_length = SD_MAX_VDI_LEN + SD_MAX_VDI_TAG_LEN;
 	hdr.flags = SD_FLAG_CMD_WRITE;
 
@@ -94,6 +97,7 @@ static int read_object(struct sd_cluster *c, uint64_t oid, void *data,
 	int ret;
 
 	hdr.opcode = SD_OP_READ_OBJ;
+	hdr.proto_ver = SD_PROTO_VER;
 	hdr.data_length = datalen;
 	hdr.obj.oid = oid;
 	hdr.obj.offset = offset;
@@ -271,6 +275,7 @@ static int do_vdi_create(struct sd_cluster *c, char *name, uint64_t vdi_size,
 	int ret;
 
 	hdr.opcode = SD_OP_NEW_VDI;
+	hdr.proto_ver = SD_PROTO_VER;
 	hdr.flags = SD_FLAG_CMD_WRITE;
 	hdr.data_length = SD_MAX_VDI_LEN;
 
@@ -300,6 +305,7 @@ static int write_object(struct sd_cluster *c, uint64_t oid, uint64_t cow_oid,
 		hdr.opcode = SD_OP_CREATE_AND_WRITE_OBJ;
 	else
 		hdr.opcode = SD_OP_WRITE_OBJ;
+	hdr.proto_ver = SD_PROTO_VER;
 	hdr.data_length = datalen;
 	hdr.flags = flags | SD_FLAG_CMD_WRITE;
 	if (cow_oid)
@@ -466,6 +472,7 @@ int sd_vdi_delete(struct sd_cluster *c, char *name, char *tag)
 	}
 
 	hdr.opcode = SD_OP_DEL_VDI;
+	hdr.proto_ver = SD_PROTO_VER;
 	hdr.flags = SD_FLAG_CMD_WRITE;
 	hdr.data_length = sizeof(data);
 
