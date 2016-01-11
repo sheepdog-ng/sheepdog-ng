@@ -81,7 +81,8 @@ int err_to_sderr(const char *path, uint64_t oid, int err)
 	}
 }
 
-int update_epoch_log(uint32_t epoch, struct sd_node *nodes, size_t nr_nodes)
+int update_epoch_log(uint32_t epoch, struct sd_node *nodes,
+		      size_t nr_nodes, bool force_create)
 {
 	int ret, len, nodes_len;
 	time_t t;
@@ -108,7 +109,7 @@ int update_epoch_log(uint32_t epoch, struct sd_node *nodes, size_t nr_nodes)
 
 	snprintf(path, sizeof(path), "%s%08u", epoch_path, epoch);
 
-	ret = atomic_create_and_write(path, buf, len, true);
+	ret = atomic_create_and_write(path, buf, len, force_create);
 
 	free(buf);
 	return ret;
