@@ -724,11 +724,9 @@ struct delete_work {
 	struct work work;
 };
 
-static void vdi_delete_work(struct work *work)
+static int vdi_delete_horse(int32_t vid)
 {
-	struct delete_work *dw = container_of(work, struct delete_work, work);
 	struct sd_inode *inode = xvalloc(sizeof(*inode));
-	uint32_t vid = dw->vid;
 	int ret;
 
 	ret = read_backend_object(vid_to_vdi_oid(vid),
@@ -782,7 +780,13 @@ static void vdi_delete_work(struct work *work)
 			      SD_INODE_HEADER_SIZE, 0, false);
 out:
 	free(inode);
-	dw->ret = ret;
+	return ret;
+}
+
+static void vdi_delete_work(struct work *work)
+{
+	struct delete_work *dw = container_of(work, struct delete_work, work);
+	dw->ret = vdi_delete_horse(dw->vid);
 }
 
 static void vdi_delete_done(struct work *work)
@@ -796,18 +800,24 @@ static void vdi_delete_done(struct work *work)
 }
 
 /*
- * Make deletion asynchronous
- *
  * We need to put deletion into a worker thread otherwise we'll block
  * .process_work. So return of the deletion request only implies the success
  * of the acception of 'vdi delete' request. The real deletion is delayed and
  * could fail. In the failure case, users are expected to resend the deletion
  * request.
+ *
+ * In synchronous deletion, return of the deletion request means the completion
+ * of the delete operation, both data and meta data are deleted. But this will
+ * block the cluster operation.
  */
-int vdi_delete(uint32_t vid)
+int vdi_delete(uint32_t vid, bool sync_delete)
 {
-	struct delete_work *dw = xzalloc(sizeof(*dw));
+	struct delete_work *dw;
 
+	if (sync_delete)
+		return vdi_delete_horse(vid);
+
+	dw = xzalloc(sizeof(*dw));
 	dw->vid = vid;
 	dw->work.fn = vdi_delete_work;
 	dw->work.done = vdi_delete_done;

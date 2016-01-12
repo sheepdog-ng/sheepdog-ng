@@ -33,7 +33,6 @@ static int unlock_vdi(struct sd_vdi *vdi)
 	int ret;
 
 	sd_init_req(&hdr, SD_OP_RELEASE_VDI);
-	hdr.vdi.type = LOCK_TYPE_NORMAL;
 	hdr.vdi.base_vdi_id = vdi->vid;
 	ret = sd_run_sdreq(vdi->c, &hdr, NULL);
 	if (ret != SD_RES_SUCCESS)

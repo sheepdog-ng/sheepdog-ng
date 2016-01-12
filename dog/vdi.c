@@ -730,7 +730,8 @@ static int vdi_resize(int argc, char **argv)
 	return EXIT_SUCCESS;
 }
 
-static int do_vdi_delete(const char *vdiname, int snap_id, const char *snap_tag)
+static int do_vdi_delete(const char *vdiname, int snap_id, const char *snap_tag,
+			 bool sync_delete)
 {
 	int ret;
 	struct sd_req hdr;
@@ -758,6 +759,7 @@ static int do_vdi_delete(const char *vdiname, int snap_id, const char *snap_tag)
 	hdr.flags = SD_FLAG_CMD_WRITE;
 	hdr.data_length = sizeof(data);
 	hdr.vdi.snapid = snap_id;
+	hdr.vdi.sync_delete = sync_delete;
 	memset(data, 0, sizeof(data));
 	pstrcpy(data, SD_MAX_VDI_LEN, vdiname);
 	if (snap_tag)
@@ -784,7 +786,7 @@ static int vdi_delete(int argc, char **argv)
 	const char *vdiname = argv[optind];
 
 	return do_vdi_delete(vdiname, vdi_cmd_data.snapshot_id,
-			     vdi_cmd_data.snapshot_tag);
+			     vdi_cmd_data.snapshot_tag, false);
 }
 
 static int vdi_rollback(int argc, char **argv)
@@ -810,7 +812,7 @@ static int vdi_rollback(int argc, char **argv)
 		confirm("This operation discards any changes made since the"
 			" previous\nsnapshot was taken.  Continue? [yes/no]: ");
 
-	ret = do_vdi_delete(vdiname, 0, NULL);
+	ret = do_vdi_delete(vdiname, 0, NULL, true);
 	if (ret != SD_RES_SUCCESS) {
 		sd_err("Failed to delete the current state");
 		return EXIT_FAILURE;
@@ -2218,7 +2220,7 @@ static uint32_t do_restore(const char *vdiname, int snapid, const char *tag)
 		ret = restore_obj(backup, vid, inode);
 		if (ret != SD_RES_SUCCESS) {
 			sd_err("failed to restore backup");
-			do_vdi_delete(vdiname, 0, NULL);
+			do_vdi_delete(vdiname, 0, NULL, true);
 			ret = EXIT_FAILURE;
 			break;
 		}
@@ -2279,7 +2281,7 @@ static int vdi_restore(int argc, char **argv)
 		goto out;
 	}
 
-	ret = do_vdi_delete(vdiname, 0, NULL);
+	ret = do_vdi_delete(vdiname, 0, NULL, true);
 	if (ret != EXIT_SUCCESS) {
 		sd_err("Failed to delete the current state");
 		goto out;

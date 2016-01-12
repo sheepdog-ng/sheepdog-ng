@@ -339,7 +339,7 @@ int get_req_copy_number(struct request *req);
 int vdi_exist(uint32_t vid);
 int vdi_create(const struct vdi_iocb *iocb, uint32_t *new_vid);
 int vdi_snapshot(const struct vdi_iocb *iocb, uint32_t *new_vid);
-int vdi_delete(uint32_t vid);
+int vdi_delete(uint32_t vid, bool);
 int vdi_lookup(const struct vdi_iocb *iocb, struct vdi_info *info);
 void vdi_mark_snapshot(uint32_t vid);
 void vdi_delete_state(uint32_t vid);
