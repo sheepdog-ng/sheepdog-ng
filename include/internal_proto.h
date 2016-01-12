@@ -343,20 +343,6 @@ struct trace_graph_item;
 
 #endif	/* HAVE_TRACE */
 
-/* VDI locking state, used by both of sheep and dog */
-enum lock_state {
-	LOCK_STATE_UNLOCKED = 1,
-	LOCK_STATE_LOCKED,
-	LOCK_STATE_SHARED,
-};
-
-enum shared_lock_state {
-	/* for iSCSI multipath, per node shared state */
-	SHARED_LOCK_STATE_MODIFIED = 1,
-	SHARED_LOCK_STATE_SHARED,
-	SHARED_LOCK_STATE_INVALIDATED,
-};
-
 static inline const char *sd_strerror(int err)
 {
 	/* from sheepdog_proto.h */
