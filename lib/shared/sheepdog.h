@@ -61,6 +61,13 @@ struct sd_vdi {
 	char *name;
 };
 
+static inline void sd_init_req(struct sd_req *req, uint8_t opcode)
+{
+	memset(req, 0, sizeof(*req));
+	req->opcode = opcode;
+	req->proto_ver = opcode < 0x80 ? SD_PROTO_VER : SD_SHEEP_PROTO_VER;
+}
+
 /*
  * Connect to the specified Sheepdog cluster.
  *

@@ -31,6 +31,8 @@
  */
 #define SD_PROTO_VER 0x01
 
+#define SD_SHEEP_PROTO_VER 0x09
+
 #define SD_LISTEN_PORT 7000
 
 #define SD_OP_CREATE_AND_WRITE_OBJ  0x01

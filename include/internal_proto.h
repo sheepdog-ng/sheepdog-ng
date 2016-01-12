@@ -25,8 +25,6 @@
 #include "rbtree.h"
 #include "fec.h"
 
-#define SD_SHEEP_PROTO_VER 0x09
-
 #define SD_DEFAULT_COPIES 3
 /*
  * For erasure coding, we use at most SD_EC_MAX_STRIP for data strips and

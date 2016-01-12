@@ -231,16 +231,16 @@ static int do_submit_sheep_request(struct sheep_request *req)
 	case VDI_CREATE:
 	case VDI_WRITE:
 		if (req->opcode == VDI_CREATE)
-			hdr.opcode = SD_OP_CREATE_AND_WRITE_OBJ;
+			sd_init_req(&hdr, SD_OP_CREATE_AND_WRITE_OBJ);
 		else
-			hdr.opcode = SD_OP_WRITE_OBJ;
+			sd_init_req(&hdr, SD_OP_WRITE_OBJ);
 		hdr.flags = SD_FLAG_CMD_WRITE | SD_FLAG_CMD_DIRECT;
 		if (req->cow_oid)
 			hdr.flags |= SD_FLAG_CMD_COW;
 		ret = sheep_submit_sdreq(c, &hdr, req->buf, req->length);
 		break;
 	case VDI_READ:
-		hdr.opcode = SD_OP_READ_OBJ;
+		sd_init_req(&hdr, SD_OP_READ_OBJ);
 		ret = sheep_submit_sdreq(c, &hdr, NULL, 0);
 		break;
 	case SHEEP_CTL:
@@ -516,8 +516,7 @@ static int get_all_nodes(struct sd_cluster *c)
 	nodes_size = SD_MAX_NODES * sizeof(struct sd_node);
 	nodes = xzalloc(nodes_size);
 
-	hdr.opcode = SD_OP_GET_NODE_LIST;
-	hdr.proto_ver = SD_SHEEP_PROTO_VER;
+	sd_init_req(&hdr, SD_OP_GET_NODE_LIST);
 	hdr.data_length = nodes_size;
 
 	ret = sd_run_sdreq(c, &hdr, nodes);
