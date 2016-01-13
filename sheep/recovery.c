@@ -373,6 +373,7 @@ again:
 	case SD_RES_SUCCESS:
 		/* Succeed */
 		break;
+	case SD_RES_NETWORK_ERROR:
 	case SD_RES_OLD_NODE_VER:
 		row->stop = true;
 		break;
