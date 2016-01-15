@@ -684,10 +684,10 @@ static void cluster_check_cb(uint32_t vid, const char *name, const char *tag,
 			     const struct sd_inode *inode, void *data)
 {
 	if (vdi_is_snapshot(inode))
-		printf("fix snapshot %s (id: %d, tag: \"%s\")\n", name,
+		printf("Checking snapshot %s (id: %d, tag: \"%s\")\n", name,
 		       snapid, tag);
 	else
-		printf("fix vdi %s\n", name);
+		printf("Checking vdi %s\n", name);
 
 	do_vdi_check(inode);
 }
