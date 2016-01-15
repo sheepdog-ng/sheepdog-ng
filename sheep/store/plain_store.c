@@ -384,15 +384,15 @@ static int move_object_to_stale_dir(uint64_t oid, const char *wd,
 	/* ec_index from md.c is reliable so we can directly use it */
 	if (ec_index < SD_MAX_COPIES) {
 		snprintf(path, PATH_MAX, "%s/%016"PRIx64"_%d",
-			 md_get_object_dir(oid), oid, ec_index);
+			 wd, oid, ec_index);
 		snprintf(stale_path, PATH_MAX,
 			 "%s/.stale/%016"PRIx64"_%d.%"PRIu32,
-			 md_get_object_dir(oid), oid, ec_index, tgt_epoch);
+			 wd, oid, ec_index, tgt_epoch);
 	} else {
 		snprintf(path, PATH_MAX, "%s/%016" PRIx64,
-			 md_get_object_dir(oid), oid);
+			 wd, oid);
 		snprintf(stale_path, PATH_MAX, "%s/.stale/%016"PRIx64".%"PRIu32,
-			 md_get_object_dir(oid), oid, tgt_epoch);
+			 wd, oid, tgt_epoch);
 	}
 
 	if (unlikely(rename(path, stale_path)) < 0) {
