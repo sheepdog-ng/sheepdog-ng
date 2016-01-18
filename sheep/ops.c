@@ -185,7 +185,7 @@ static int cluster_del_vdi(struct request *req)
 		return ret;
 	rsp->vdi.vdi_id = info.vid;
 
-	return vdi_delete(info.vid, hdr->vdi.sync_delete);
+	return vdi_delete(info.vid, hdr->vdi.async_delete);
 }
 
 struct cache_deletion_work {

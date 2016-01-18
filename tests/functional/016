@@ -15,22 +15,10 @@ _vdi_create base 100M -P
 
 $DOG vdi snapshot base -s tag
 $DOG vdi snapshot base -s tag
-
-sleep 1
-
 $DOG vdi clone -s 1 base test
-
-sleep 1
-
 $DOG vdi delete test
-
-sleep 1
 $DOG vdi delete base
-
-sleep 1
 $DOG vdi delete -s 1 base
-
-sleep 3
 echo there should be no vdi
 _vdi_list
 

@@ -37,6 +37,7 @@ static struct sd_option vdi_options[] = {
 	{'o', "oid", true, "specify the object id of the tracking object"},
 	{'e', "exist", false, "only check objects exist or not,\n"
 	 "                          neither comparing nor repairing"},
+	{'A', "async", false, "delete vdi asynchronously"},
 	{ 0, NULL, false, NULL },
 };
 
@@ -55,6 +56,7 @@ static struct vdi_cmd_data {
 	uint64_t oid;
 	bool no_share;
 	bool exist;
+	bool async;
 } vdi_cmd_data = { ~0, };
 
 struct get_vdi_info {
@@ -731,7 +733,7 @@ static int vdi_resize(int argc, char **argv)
 }
 
 static int do_vdi_delete(const char *vdiname, int snap_id, const char *snap_tag,
-			 bool sync_delete)
+			 bool async_delete)
 {
 	int ret;
 	struct sd_req hdr;
@@ -759,7 +761,7 @@ static int do_vdi_delete(const char *vdiname, int snap_id, const char *snap_tag,
 	hdr.flags = SD_FLAG_CMD_WRITE;
 	hdr.data_length = sizeof(data);
 	hdr.vdi.snapid = snap_id;
-	hdr.vdi.sync_delete = sync_delete;
+	hdr.vdi.async_delete = async_delete;
 	memset(data, 0, sizeof(data));
 	pstrcpy(data, SD_MAX_VDI_LEN, vdiname);
 	if (snap_tag)
@@ -786,7 +788,7 @@ static int vdi_delete(int argc, char **argv)
 	const char *vdiname = argv[optind];
 
 	return do_vdi_delete(vdiname, vdi_cmd_data.snapshot_id,
-			     vdi_cmd_data.snapshot_tag, false);
+			     vdi_cmd_data.snapshot_tag, vdi_cmd_data.async);
 }
 
 static int vdi_rollback(int argc, char **argv)
@@ -812,7 +814,7 @@ static int vdi_rollback(int argc, char **argv)
 		confirm("This operation discards any changes made since the"
 			" previous\nsnapshot was taken.  Continue? [yes/no]: ");
 
-	ret = do_vdi_delete(vdiname, 0, NULL, true);
+	ret = do_vdi_delete(vdiname, 0, NULL, false);
 	if (ret != SD_RES_SUCCESS) {
 		sd_err("Failed to delete the current state");
 		return EXIT_FAILURE;
@@ -2220,7 +2222,7 @@ static uint32_t do_restore(const char *vdiname, int snapid, const char *tag)
 		ret = restore_obj(backup, vid, inode);
 		if (ret != SD_RES_SUCCESS) {
 			sd_err("failed to restore backup");
-			do_vdi_delete(vdiname, 0, NULL, true);
+			do_vdi_delete(vdiname, 0, NULL, false);
 			ret = EXIT_FAILURE;
 			break;
 		}
@@ -2281,7 +2283,7 @@ static int vdi_restore(int argc, char **argv)
 		goto out;
 	}
 
-	ret = do_vdi_delete(vdiname, 0, NULL, true);
+	ret = do_vdi_delete(vdiname, 0, NULL, false);
 	if (ret != EXIT_SUCCESS) {
 		sd_err("Failed to delete the current state");
 		goto out;
@@ -2587,7 +2589,7 @@ static struct subcommand vdi_cmd[] = {
 	{"clone", "<src vdi> <dst vdi>", "sPnaphrvT", "clone an image",
 	 NULL, CMD_NEED_ARG,
 	 vdi_clone, vdi_options},
-	{"delete", "<vdiname>", "saphT", "delete an image",
+	{"delete", "<vdiname>", "saphTA", "delete an image",
 	 NULL, CMD_NEED_ARG,
 	 vdi_delete, vdi_options},
 	{"rollback", "<vdiname>", "saphfrvT", "rollback to a snapshot",
@@ -2705,6 +2707,8 @@ static int vdi_parser(int ch, const char *opt)
 		break;
 	case 'e':
 		vdi_cmd_data.exist = true;
+	case 'A':
+		vdi_cmd_data.async = true;
 		break;
 	}
 

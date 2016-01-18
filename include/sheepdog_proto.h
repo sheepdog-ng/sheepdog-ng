@@ -160,7 +160,7 @@ struct sd_req {
 			uint8_t		store_policy;
 			uint8_t		block_size_shift;
 			uint32_t	snapid;
-			uint8_t		sync_delete;
+			uint8_t		async_delete;
 			uint8_t		reserved[3];
 		} vdi;
 

@@ -810,11 +810,11 @@ static void vdi_delete_done(struct work *work)
  * of the delete operation, both data and meta data are deleted. But this will
  * block the cluster operation.
  */
-int vdi_delete(uint32_t vid, bool sync_delete)
+int vdi_delete(uint32_t vid, bool async_delete)
 {
 	struct delete_work *dw;
 
-	if (sync_delete)
+	if (!async_delete)
 		return vdi_delete_horse(vid);
 
 	dw = xzalloc(sizeof(*dw));
