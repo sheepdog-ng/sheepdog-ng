@@ -120,6 +120,7 @@ static void gateway_op_done(struct work *work)
 		}
 		break;
 	case SD_RES_SUCCESS:
+	case SD_RES_READONLY:
 		break;
 	default:
 		if (req->local)
