@@ -45,7 +45,7 @@ static struct sd_vdi *alloc_vdi(struct sd_cluster *c, char *name)
 {
 	struct sd_vdi *new = xzalloc(sizeof(*new));
 
-	new->name = name;
+	new->name = strdup(name);
 	new->inode = xmalloc(sizeof(struct sd_inode));
 	sd_init_rw_lock(&new->lock);
 
@@ -55,6 +55,7 @@ static struct sd_vdi *alloc_vdi(struct sd_cluster *c, char *name)
 static void free_vdi(struct sd_vdi *vdi)
 {
 	sd_destroy_rw_lock(&vdi->lock);
+	free(vdi->name);
 	free(vdi->inode);
 	free(vdi);
 }
