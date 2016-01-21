@@ -218,8 +218,7 @@ struct cluster_info {
 	uint8_t nr_copies;
 	uint8_t copy_policy;
 	enum sd_status status : 8;
-	uint8_t block_size_shift;
-	uint8_t __pad[3];
+	uint8_t __pad[4];
 	uint8_t store[STORE_LEN];
 
 	/* Node list at cluster_info->epoch */

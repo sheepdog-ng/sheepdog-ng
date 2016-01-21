@@ -198,7 +198,7 @@ static struct sd_inode *alloc_inode(const struct vdi_iocb *iocb,
 	new->copy_policy = iocb->copy_policy;
 	new->store_policy = iocb->store_policy;
 	new->nr_copies = iocb->nr_copies;
-	new->block_size_shift = sys->cinfo.block_size_shift;
+	new->block_size_shift = SD_DEFAULT_BLOCK_SIZE_SHIFT;
 	new->snap_id = new_snapid;
 	new->parent_vdi_id = iocb->base_vid;
 	if (data_vdi_id)

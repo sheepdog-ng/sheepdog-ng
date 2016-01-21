@@ -21,7 +21,6 @@ static struct sheepdog_config {
 	uint8_t store[STORE_LEN];
 	uint8_t shutdown;
 	uint8_t copy_policy;
-	uint8_t block_size_shift;
 	uint16_t version;
 	uint64_t space;
 } config;
@@ -64,7 +63,6 @@ static int get_cluster_config(struct cluster_info *cinfo)
 	cinfo->nr_copies = config.copies;
 	cinfo->flags = config.flags;
 	cinfo->copy_policy = config.copy_policy;
-	cinfo->block_size_shift = config.block_size_shift;
 	memcpy(cinfo->store, config.store, sizeof(config.store));
 
 	return SD_RES_SUCCESS;
@@ -156,7 +154,6 @@ int set_cluster_config(const struct cluster_info *cinfo)
 	config.copies = cinfo->nr_copies;
 	config.copy_policy = cinfo->copy_policy;
 	config.flags = cinfo->flags;
-	config.block_size_shift = cinfo->block_size_shift;
 	memset(config.store, 0, sizeof(config.store));
 	pstrcpy((char *)config.store, sizeof(config.store),
 		(char *)cinfo->store);

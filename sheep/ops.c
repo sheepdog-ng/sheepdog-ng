@@ -315,12 +315,9 @@ static int cluster_make_fs(const struct sd_req *req, struct sd_rsp *rsp,
 
 	sys->cinfo.nr_copies = req->cluster.copies;
 	sys->cinfo.copy_policy = req->cluster.copy_policy;
-	sys->cinfo.block_size_shift = req->cluster.block_size_shift;
 	sys->cinfo.flags = req->cluster.flags;
 	if (!sys->cinfo.nr_copies)
 		sys->cinfo.nr_copies = SD_DEFAULT_COPIES;
-	if (!sys->cinfo.block_size_shift)
-		sys->cinfo.block_size_shift = SD_DEFAULT_BLOCK_SIZE_SHIFT;
 	sys->cinfo.ctime = req->cluster.ctime;
 	set_cluster_config(&sys->cinfo);
 
@@ -1142,7 +1139,7 @@ static int local_get_cluster_default(const struct sd_req *req,
 {
 	rsp->cluster_default.nr_copies = sys->cinfo.nr_copies;
 	rsp->cluster_default.copy_policy = sys->cinfo.copy_policy;
-	rsp->cluster_default.block_size_shift = sys->cinfo.block_size_shift;
+	rsp->cluster_default.block_size_shift = SD_DEFAULT_BLOCK_SIZE_SHIFT;
 
 	return SD_RES_SUCCESS;
 }
