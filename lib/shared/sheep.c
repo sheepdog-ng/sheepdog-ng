@@ -221,12 +221,6 @@ static int do_submit_sheep_request(struct sheep_request *req)
 	int ret = 0;
 	uint32_t wlen = 0;
 
-	hdr.id = req->seq_num;
-	hdr.data_length = req->length;
-	hdr.obj.oid = req->oid;
-	hdr.obj.cow_oid = req->cow_oid;
-	hdr.obj.offset = req->offset;
-
 	switch (req->opcode) {
 	case VDI_CREATE:
 	case VDI_WRITE:
@@ -234,6 +228,11 @@ static int do_submit_sheep_request(struct sheep_request *req)
 			sd_init_req(&hdr, SD_OP_CREATE_AND_WRITE_OBJ);
 		else
 			sd_init_req(&hdr, SD_OP_WRITE_OBJ);
+		hdr.id = req->seq_num;
+		hdr.data_length = req->length;
+		hdr.obj.oid = req->oid;
+		hdr.obj.cow_oid = req->cow_oid;
+		hdr.obj.offset = req->offset;
 		hdr.flags = SD_FLAG_CMD_WRITE | SD_FLAG_CMD_DIRECT;
 		if (req->cow_oid)
 			hdr.flags |= SD_FLAG_CMD_COW;
@@ -241,6 +240,11 @@ static int do_submit_sheep_request(struct sheep_request *req)
 		break;
 	case VDI_READ:
 		sd_init_req(&hdr, SD_OP_READ_OBJ);
+		hdr.id = req->seq_num;
+		hdr.data_length = req->length;
+		hdr.obj.oid = req->oid;
+		hdr.obj.cow_oid = req->cow_oid;
+		hdr.obj.offset = req->offset;
 		ret = sheep_submit_sdreq(c, &hdr, NULL, 0);
 		break;
 	case SHEEP_CTL:
@@ -249,6 +253,8 @@ static int do_submit_sheep_request(struct sheep_request *req)
 			wlen = hdr_ptr->data_length;
 		ret = sheep_submit_sdreq(c, hdr_ptr, req->buf, wlen);
 		break;
+	default:
+		panic("Invalid opcode %d", req->opcode);
 	}
 
 	return ret;
