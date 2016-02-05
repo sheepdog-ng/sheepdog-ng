@@ -548,11 +548,6 @@ static int load_snapshot(int argc, char **argv)
 	if (snap_log_read_hdr(&hdr) <= 0)
 		goto out;
 
-	cluster_cmd_data.copies = hdr.copy_number;
-	cluster_cmd_data.copy_policy = hdr.copy_policy;
-	if (cluster_format(0, NULL) != SD_RES_SUCCESS)
-		goto out;
-
 	if (farm_load_snapshot(idx, tag, argc - optind, argv + optind)
 			!= SD_RES_SUCCESS)
 		goto out;
