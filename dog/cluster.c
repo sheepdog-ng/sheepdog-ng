@@ -25,6 +25,7 @@ static struct sd_option cluster_options[] = {
 	 "use multi-thread for 'cluster snapshot save'"},
 	{'t', "strict", false,
 	 "do not serve write request if number of nodes is not sufficient"},
+	{'s', "manual", false, "enable manual membership control"},
 	{'d', "diff", false,
 	 "just output the changes between the two adjacent epoches"
 		"for cluster info"},
@@ -37,6 +38,7 @@ static struct cluster_cmd_data {
 	uint8_t multithread;
 	bool force;
 	bool strict;
+	bool manual;
 	bool diff;
 	char name[STORE_LEN];
 } cluster_cmd_data;
@@ -127,6 +129,8 @@ static int cluster_format(int argc, char **argv)
 	hdr.flags |= SD_FLAG_CMD_WRITE;
 	if (cluster_cmd_data.strict)
 		hdr.cluster.flags |= SD_CLUSTER_FLAG_STRICT;
+	if (cluster_cmd_data.manual)
+		hdr.cluster.flags |= SD_CLUSTER_FLAG_MANUAL;
 
 #ifdef HAVE_DISKVNODES
 	hdr.cluster.flags |= SD_CLUSTER_FLAG_DISKMODE;
@@ -779,7 +783,7 @@ failure:
 static struct subcommand cluster_cmd[] = {
 	{"info", NULL, "aprhvTd", "show cluster information",
 	 NULL, CMD_NEED_NODELIST, cluster_info, cluster_options},
-	{"format", NULL, "bctaphTf", "create a Sheepdog store",
+	{"format", NULL, "bctaphTfs", "create a Sheepdog store",
 	 NULL, CMD_NEED_NODELIST, cluster_format, cluster_options},
 	{"shutdown", NULL, "aphT", "stop Sheepdog",
 	 NULL, 0, cluster_shutdown, cluster_options},
@@ -832,6 +836,8 @@ static int cluster_parser(int ch, const char *opt)
 	case 'd':
 		cluster_cmd_data.diff = true;
 		break;
+	case 's':
+		cluster_cmd_data.manual = true;
 	}
 
 	return 0;

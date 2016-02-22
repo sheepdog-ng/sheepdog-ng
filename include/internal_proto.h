@@ -154,6 +154,7 @@
 
 #define SD_CLUSTER_FLAG_STRICT		0x0001 /* Strict mode for write */
 #define SD_CLUSTER_FLAG_DISKMODE	0x0002 /* Disk mode for cluster */
+#define SD_CLUSTER_FLAG_MANUAL		0x0004 /* Manual recovery mode */
 
 
 enum sd_status {
