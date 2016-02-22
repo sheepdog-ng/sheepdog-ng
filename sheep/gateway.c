@@ -286,6 +286,9 @@ static int gateway_replication_read(struct request *req)
 		v = obj_vnodes[idx];
 		if (vnode_is_local(v))
 			continue;
+
+		if (v->node->nid.gone)
+			continue;
 		/*
 		 * We need to re-init it because rsp and req share the same
 		 * structure.
@@ -517,6 +520,9 @@ static int gateway_forward_request(struct request *req)
 		const struct node_id *nid;
 
 		nid = &target_nodes[i]->nid;
+		if (nid->gone)
+			continue;
+
 		sfd = sockfd_cache_get(nid);
 		if (!sfd) {
 			err_ret = SD_RES_NETWORK_ERROR;

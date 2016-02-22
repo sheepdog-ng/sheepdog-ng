@@ -169,7 +169,8 @@ struct node_id {
 	uint16_t port;
 	uint8_t io_addr[16];
 	uint16_t io_port;
-	uint8_t pad[4];
+	uint8_t gone;
+	uint8_t pad[3];
 };
 
 struct disk_info {

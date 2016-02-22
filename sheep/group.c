@@ -967,20 +967,25 @@ static bool is_gateway_only_cluster(const struct rb_root *nroot)
 	return true;
 }
 
-main_fn void sd_leave_handler(const struct sd_node *left,
-			      const struct rb_root *nroot, size_t nr_nodes)
+static void manual_leave_handler(const struct sd_node *left)
+{
+	struct vnode_info *cur_vinfo = get_vnode_info();
+	struct sd_node *n = rb_search(&cur_vinfo->nroot,
+				      (struct sd_node *)left, rb, node_cmp);
+	if (n) {
+		sd_debug("%s left", node_to_str(left));
+		n->nid.gone = true;
+	} else {
+		sd_debug("can't find %s", node_to_str(left));
+	}
+	put_vnode_info(cur_vinfo);
+}
+
+static void auto_leave_handler(const struct sd_node *left,
+			       const struct rb_root *nroot, size_t nr_nodes)
 {
 	struct vnode_info *old_vnode_info;
-	struct sd_node *n;
 	int ret;
-
-	sd_debug("leave %s", node_to_str(left));
-	rb_for_each_entry(n, nroot, rb) {
-		sd_debug("%s", node_to_str(n));
-	}
-
-	if (sys->cinfo.status == SD_STATUS_SHUTDOWN)
-		return;
 
 	if (node_is_local(left))
 		/* Mark leave node as gateway only node */
@@ -1007,8 +1012,27 @@ main_fn void sd_leave_handler(const struct sd_node *left,
 	}
 
 	put_vnode_info(old_vnode_info);
+}
+
+main_fn void sd_leave_handler(const struct sd_node *left,
+			      const struct rb_root *nroot, size_t nr_nodes)
+{
+	struct sd_node *n;
+
+	sd_debug("leave %s", node_to_str(left));
+	rb_for_each_entry(n, nroot, rb) {
+		sd_debug("%s", node_to_str(n));
+	}
+
+	if (sys->cinfo.status == SD_STATUS_SHUTDOWN)
+		return;
 
 	sockfd_cache_del_node(&left->nid);
+
+	if (sys->cinfo.flags & SD_CLUSTER_FLAG_MANUAL)
+		return manual_leave_handler(left);
+	else
+		return auto_leave_handler(left, nroot, nr_nodes);
 }
 
 static void update_node_size(struct sd_node *node)
