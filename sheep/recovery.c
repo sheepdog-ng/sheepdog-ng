@@ -309,6 +309,10 @@ static int recover_object_from_replica(struct recovery_obj_work *row,
 		}
 	}
 
+	/* For manual recovery, we recover locally in the last */
+	if (sys->cinfo.flags & SD_CLUSTER_FLAG_MANUAL)
+		start = (start + 1) % nr_copies;
+
 	/* Let's do a breadth-first search */
 	for (int i = 0; i < nr_copies; i++) {
 		const struct sd_node *node;

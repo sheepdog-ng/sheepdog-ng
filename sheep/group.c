@@ -579,7 +579,8 @@ static struct vnode_info *alloc_old_vnode_info(void)
 	return old;
 }
 
-static void setup_backend_store(const struct cluster_info *cinfo)
+static void setup_backend_store(const struct cluster_info *cinfo,
+				const struct sd_node *joined)
 {
 	int ret;
 
@@ -600,8 +601,7 @@ static void setup_backend_store(const struct cluster_info *cinfo)
 	 * We need to purge the stale objects for sheep joining back
 	 * after crash
 	 */
-	if (xlfind(&sys->this_node, cinfo->nodes, cinfo->nr_nodes,
-		   node_cmp) == NULL) {
+	if (node_is_local(joined) && !was_cluster_shutdowned()) {
 		ret = sd_store->purge_obj();
 		if (ret != SD_RES_SUCCESS)
 			panic("can't remove stale objects");
@@ -752,7 +752,7 @@ static void update_cluster_info(const struct cluster_info *cinfo,
 	sd_debug("status = %d, epoch = %d", cinfo->status, cinfo->epoch);
 
 	if (!sys->gateway_only)
-		setup_backend_store(cinfo);
+		setup_backend_store(cinfo, joined);
 
 	if (node_is_local(joined))
 		sockfd_cache_add_group(nroot);
