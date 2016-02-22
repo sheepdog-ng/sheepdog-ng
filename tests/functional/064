@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Test node failure while reweighting
+# Test node failure while reconfiging
 . ./common
 
 _need_to_be_root
@@ -26,9 +26,9 @@ _wait_for_sheep_recovery 0
 _node_info
 $DOG node list
 
-$DOG cluster reweight
+$DOG cluster reconfig
 
-# restart sheep1 while reweighting
+# restart sheep1 while reconfiging
 _kill_sheep 2
 _wait_for_sheep_recovery 0
 _node_info | grep -v ^2 # the content of sheep 2 is non-deterministic

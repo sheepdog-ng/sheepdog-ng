@@ -688,10 +688,9 @@ static inline void kick_next_rw(void)
 	nrinfo = uatomic_xchg_ptr(&next_rinfo, NULL);
 
 	/*
-	* When md recovery supersedes the reweight or node recovery,
-	* we need to notify completion.
-	*/
-
+	 * When md recovery supersedes the reconfig or node recovery, we need to
+	 * notify completion.
+	 */
 	if (!nrinfo->notify_complete && cur->notify_complete)
 		nrinfo->notify_complete = true;
 

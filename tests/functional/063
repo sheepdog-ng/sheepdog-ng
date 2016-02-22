@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Test reweight
+# Test reconfig
 . ./common
 
 _need_to_be_root
@@ -27,7 +27,7 @@ $DOG node list
 $DOG node md plug -f $STORE/4
 _wait_for_sheep_recovery 0
 
-$DOG cluster reweight
+$DOG cluster reconfig
 _start_sheep 5
 _wait_for_sheep 5
 _wait_for_sheep_recovery 0

@@ -762,7 +762,14 @@ static bool node_size_varied(void)
 	return true;
 }
 
-static int cluster_reweight(const struct sd_req *req, struct sd_rsp *rsp,
+static int local_reconfig(struct request *req)
+{
+	if (sys->cinfo.flags & SD_CLUSTER_FLAG_MANUAL)
+		return sys->cdrv->update_node(&sys->this_node);
+	return SD_RES_SUCCESS;
+}
+
+static int cluster_reconfig(const struct sd_req *req, struct sd_rsp *rsp,
 			    void *data, const struct sd_node *sender)
 {
 	if (node_size_varied())
@@ -1253,7 +1260,8 @@ static struct sd_op_template sd_ops[] = {
 		.name = "REWEIGHT",
 		.type = SD_OP_TYPE_CLUSTER,
 		.is_admin_op = true,
-		.process_main = cluster_reweight,
+		.process_work = local_reconfig,
+		.process_main = cluster_reconfig,
 	},
 
 	[SD_OP_ALTER_CLUSTER_COPY] = {

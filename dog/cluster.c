@@ -666,7 +666,7 @@ static int cluster_snapshot(int argc, char **argv)
 	return do_generic_subcommand(cluster_snapshot_cmd, argc, argv);
 }
 
-static int cluster_reweight(int argc, char **argv)
+static int cluster_reconfig(int argc, char **argv)
 {
 	int ret;
 	struct sd_req hdr;
@@ -795,8 +795,8 @@ static struct subcommand cluster_cmd[] = {
 	 "See 'dog cluster recover' for more information",
 	 cluster_recover_cmd, CMD_NEED_ARG,
 	 cluster_recover, cluster_options},
-	{"reweight", NULL, "aphT", "reweight the cluster", NULL, 0,
-	 cluster_reweight, cluster_options},
+	{"reconfig", NULL, "aphT", "reconfig the cluster", NULL, 0,
+	 cluster_reconfig, cluster_options},
 	{"check", NULL, "aphT", "check and repair cluster", NULL,
 	 CMD_NEED_NODELIST, cluster_check, cluster_options},
 	{"alter-copy", NULL, "aphTc", "set the cluster's redundancy level",

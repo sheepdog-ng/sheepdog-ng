@@ -202,7 +202,7 @@ void sd_leave_handler(const struct sd_node *left, const struct rb_root *nroot,
 void sd_notify_handler(const struct sd_node *sender, void *msg, size_t msg_len);
 bool sd_block_handler(const struct sd_node *sender);
 int sd_reconnect_handler(void);
-void sd_update_node_handler(struct sd_node *);
+void sd_update_node_handler(struct sd_node *, struct rb_root *);
 bool sd_join_handler(const struct sd_node *joining,
 		     const struct rb_root *nroot, size_t nr_nodes,
 		     void *opaque);

@@ -425,6 +425,7 @@ static bool local_process_event(void)
 	int i;
 	struct rb_root root = RB_ROOT;
 	size_t nr_nodes = 0;
+	struct sd_node *n, t;
 
 	ev = shm_queue_peek();
 	if (!ev)
@@ -502,8 +503,11 @@ static bool local_process_event(void)
 	case EVENT_UPDATE_NODE:
 		if (lnode_eq(&ev->sender, &this_node))
 			this_node = ev->sender;
-
-		sd_update_node_handler(&ev->sender.node);
+		n = rb_search(&root, &ev->sender.node, rb, node_cmp);
+		t.rb = n->rb;
+		*n = ev->sender.node;
+		n->rb = t.rb;
+		sd_update_node_handler(&ev->sender.node, &root);
 		break;
 	}
 out:

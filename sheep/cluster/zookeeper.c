@@ -1239,7 +1239,7 @@ static void zk_handle_update_node(struct zk_event *ev)
 	t->node = *snode;
 	build_node_list();
 	sd_rw_unlock(&zk_tree_lock);
-	sd_update_node_handler(snode);
+	sd_update_node_handler(snode, &sd_node_root);
 }
 
 static void (*const zk_event_handlers[])(struct zk_event *ev) = {

@@ -1086,44 +1086,27 @@ main_fn void sd_leave_handler(const struct sd_node *left,
 		return auto_leave_handler(left, nroot, nr_nodes);
 }
 
-static void update_node_size(struct sd_node *node)
+main_fn void sd_update_node_handler(struct sd_node *node, struct rb_root *nroot)
 {
-	struct vnode_info *cur_vinfo = get_vnode_info();
-	struct sd_node *n = rb_search(&cur_vinfo->nroot, node, rb, node_cmp);
+	struct vnode_info *old = main_thread_get(current_vnode_info);
+	int ret;
 
-	if (unlikely(!n))
-		panic("can't find %s", node_to_str(node));
-	n->space = node->space;
+	main_thread_set(current_vnode_info, alloc_vnode_info(nroot));
+
 	if (is_cluster_diskmode(&sys->cinfo)) {
+		struct sd_node *n = rb_search(nroot, node, rb, node_cmp);
+
 		memset(n->disks, 0, sizeof(struct disk_info) * DISK_MAX);
 		for (int i = 0; i < DISK_MAX; i++)
 			if (node->disks[i].disk_id)
 				n->disks[i] = node->disks[i];
 	}
-	put_vnode_info(cur_vinfo);
-}
 
-static void kick_node_recover(void)
-{
-	/*
-	 * Using main_thread_get() instead of get_vnode_info() is allowed
-	 * because of the same reason of update_cluster_info()
-	 */
-	struct vnode_info *old = main_thread_get(current_vnode_info);
-	int ret;
-
-	main_thread_set(current_vnode_info, alloc_vnode_info(&old->nroot));
 	ret = inc_and_log_epoch();
 	if (ret != 0)
 		panic("cannot log current epoch %d", sys->cinfo.epoch);
 	start_recovery(main_thread_get(current_vnode_info), old, true);
 	put_vnode_info(old);
-}
-
-main_fn void sd_update_node_handler(struct sd_node *node)
-{
-	update_node_size(node);
-	kick_node_recover();
 }
 
 int create_cluster(int port, int64_t zone, int nr_vnodes,
