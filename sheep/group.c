@@ -662,12 +662,92 @@ static bool membership_changed(const struct cluster_info *cinfo,
 	return false;
 }
 
+static void manual_update_cluster_info(const struct sd_node *joined)
+{
+
+	if (node_is_local(joined)) {
+		struct rb_root nroot = RB_ROOT;
+
+		for (int i = 0; i < sys->cinfo.nr_nodes; i++) {
+			struct sd_node *new = xmalloc(sizeof(*new));
+			*new = sys->cinfo.nodes[i];
+			if (rb_insert(&nroot, new, rb, node_cmp))
+				panic("node hash collision");
+		}
+
+		assert(current_vnode_info == NULL);
+		main_thread_set(current_vnode_info, alloc_vnode_info(&nroot));
+
+		if (sys->cinfo.status == SD_STATUS_OK &&
+		    rb_search(&nroot, joined, rb, node_cmp) &&
+		    (joined->nr_vnodes || node_in_recovery()))
+			start_recovery(main_thread_get(current_vnode_info),
+				       main_thread_get(current_vnode_info),
+				       false);
+
+		rb_destroy(&nroot, struct sd_node, rb);
+	} else {
+		struct vnode_info *cur_vinfo = get_vnode_info();
+		struct sd_node *n = rb_search(&cur_vinfo->nroot,
+					      (struct sd_node *)joined, rb,
+					      node_cmp);
+		if (n) {
+			sd_debug("%s back", node_to_str(joined));
+			n->nid.gone = false;
+		} else {
+			sd_debug("can't find %s", node_to_str(joined));
+		}
+		put_vnode_info(cur_vinfo);
+	}
+}
+
+static void auto_update_cluster_info(const struct cluster_info *cinfo,
+				     const struct sd_node *joined,
+				     const struct rb_root *nroot,
+				     size_t nr_nodes)
+{
+	struct vnode_info *old_vnode_info;
+
+	put_vnode_info(main_thread_get(current_vnode_info));
+	main_thread_set(current_vnode_info, alloc_vnode_info(nroot));
+
+	if (cinfo->status != SD_STATUS_OK)
+		return;
+
+	if (membership_changed(cinfo, nroot, nr_nodes)) {
+		int ret;
+
+		old_vnode_info = alloc_old_vnode_info();
+		ret = inc_and_log_epoch();
+		if (ret != 0)
+			panic("cannot log current epoch %d", sys->cinfo.epoch);
+		/*
+		 * If vnode ring not changed, we don't need to start
+		 * recovery. If node is in recovery, we have to start
+		 * recovery to replace the last one to keep the epoch
+		 * up to date.
+		 */
+		if (joined->nr_vnodes || node_in_recovery())
+			start_recovery(main_thread_get(current_vnode_info),
+				       old_vnode_info, true);
+		put_vnode_info(old_vnode_info);
+	} else if (!was_cluster_shutdowned()) {
+		/*
+		 * If power failure happened while in last recovery, we should
+		 * kick recovery.
+		 */
+		start_recovery(main_thread_get(current_vnode_info),
+			       main_thread_get(current_vnode_info),
+			       false);
+	} /* No reocvery kicked if the cluster was shutdowned */
+	set_cluster_shutdown(false);
+}
+
 static void update_cluster_info(const struct cluster_info *cinfo,
 				const struct sd_node *joined,
 				const struct rb_root *nroot,
 				size_t nr_nodes)
 {
-	struct vnode_info *old_vnode_info;
 
 	sd_debug("status = %d, epoch = %d", cinfo->status, cinfo->epoch);
 
@@ -677,53 +757,16 @@ static void update_cluster_info(const struct cluster_info *cinfo,
 	if (node_is_local(joined))
 		sockfd_cache_add_group(nroot);
 	sockfd_cache_add(&joined->nid);
-
-	/*
-	 * We need use main_thread_get() to obtain current_vnode_info. The
-	 * reference count of old_vnode_info is decremented at the last of this
-	 * function in order to release old_vnode_info. The counter part
-	 * of this dereference is alloc_vnode_info().
-	 */
-	old_vnode_info = main_thread_get(current_vnode_info);
-	main_thread_set(current_vnode_info, alloc_vnode_info(nroot));
-
 	get_vdi_bitmap(nroot, joined);
 
-	if (cinfo->status == SD_STATUS_OK) {
-		if (!is_cluster_formatted())
-			/* initialize config file */
-			set_cluster_config(&sys->cinfo);
+	if (cinfo->status == SD_STATUS_OK && !is_cluster_formatted())
+		/* initialize config file */
+		set_cluster_config(&sys->cinfo);
 
-		if (membership_changed(cinfo, nroot, nr_nodes)) {
-			int ret;
-			if (old_vnode_info)
-				put_vnode_info(old_vnode_info);
-
-			old_vnode_info = alloc_old_vnode_info();
-			ret = inc_and_log_epoch();
-			if (ret != 0)
-				panic("cannot log current epoch %d",
-				      sys->cinfo.epoch);
-
-			/*
-			 * If vnode ring not changed, we don't need to start
-			 * recovery. If node is in recovery, we have to start
-			 * recovery to replace the last one to keep the epoch
-			 * up to date.
-			 */
-			if (joined->nr_vnodes || node_in_recovery())
-				start_recovery(
-					main_thread_get(current_vnode_info),
-					       old_vnode_info, true);
-		} else if (!was_cluster_shutdowned()) {
-			start_recovery(main_thread_get(current_vnode_info),
-				       main_thread_get(current_vnode_info),
-				       false);
-		}
-		set_cluster_shutdown(false);
-	}
-
-	put_vnode_info(old_vnode_info);
+	if (sys->cinfo.flags & SD_CLUSTER_FLAG_MANUAL)
+		manual_update_cluster_info(joined);
+	else
+		auto_update_cluster_info(cinfo, joined, nroot, nr_nodes);
 }
 
 /*
@@ -746,12 +789,12 @@ main_fn void sd_notify_handler(const struct sd_node *sender, void *data,
 	if (node_is_local(sender)) {
 		if (has_process_work(op))
 			req = list_first_entry(
-				main_thread_get(pending_block_list),
-				struct request, pending_list);
+					main_thread_get(pending_block_list),
+					       struct request, pending_list);
 		else
 			req = list_first_entry(
-				main_thread_get(pending_notify_list),
-				struct request, pending_list);
+					main_thread_get(pending_notify_list),
+					       struct request, pending_list);
 		list_del(&req->pending_list);
 	}
 
@@ -774,7 +817,7 @@ main_fn void sd_notify_handler(const struct sd_node *sender, void *data,
 }
 
 /*
- * Accept the joining node and pass the cluster info to it.
+ * Check the joining node and pass the cluster info to it.
  *
  * Note that 'nodes' doesn't contain 'joining'.
  *
@@ -926,6 +969,14 @@ static bool cluster_join_check(const struct cluster_info *cinfo)
 	return true;
 }
 
+/*
+ * Accept the joining node and update the cluster info.
+ *
+ * Note that 'nodes' contains 'joined'.
+ *
+ * All the nodes in the cluster will call this function to update its cluster
+ * info.
+ */
 main_fn void sd_accept_handler(const struct sd_node *joined,
 			       const struct rb_root *nroot, size_t nr_nodes,
 			       const void *opaque)
@@ -1114,7 +1165,7 @@ int create_cluster(int port, int64_t zone, int nr_vnodes,
 	sys->cinfo.epoch = get_latest_epoch();
 	if (sys->cinfo.epoch) {
 		ret = epoch_log_read(sys->cinfo.epoch, sys->cinfo.nodes,
-				sizeof(sys->cinfo.nodes), &nr_nodes);
+				     sizeof(sys->cinfo.nodes), &nr_nodes);
 		if (ret != SD_RES_SUCCESS)
 			return -1;
 		sys->cinfo.nr_nodes = nr_nodes;
@@ -1122,10 +1173,10 @@ int create_cluster(int port, int64_t zone, int nr_vnodes,
 	sys->cinfo.status = SD_STATUS_WAIT;
 
 	main_thread_set(pending_block_list,
-			  xzalloc(sizeof(struct list_head)));
+			xzalloc(sizeof(struct list_head)));
 	INIT_LIST_HEAD(main_thread_get(pending_block_list));
 	main_thread_set(pending_notify_list,
-			  xzalloc(sizeof(struct list_head)));
+			xzalloc(sizeof(struct list_head)));
 	INIT_LIST_HEAD(main_thread_get(pending_notify_list));
 
 	INIT_LIST_HEAD(&sys->local_req_queue);
