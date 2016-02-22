@@ -693,7 +693,7 @@ static void manual_update_cluster_info(const struct sd_node *joined)
 					      node_cmp);
 		if (n) {
 			sd_debug("%s back", node_to_str(joined));
-			n->nid.gone = false;
+			n->nid.status = NODE_STATUS_RECOVER;
 		} else {
 			sd_debug("can't find %s", node_to_str(joined));
 		}
@@ -1025,7 +1025,7 @@ static void manual_leave_handler(const struct sd_node *left)
 				      (struct sd_node *)left, rb, node_cmp);
 	if (n) {
 		sd_debug("%s left", node_to_str(left));
-		n->nid.gone = true;
+		n->nid.status = NODE_STATUS_OFFLINE;
 	} else {
 		sd_debug("can't find %s", node_to_str(left));
 	}

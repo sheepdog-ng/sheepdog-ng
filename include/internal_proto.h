@@ -164,12 +164,38 @@ enum sd_status {
 	SD_STATUS_KILLED,
 };
 
+
+/*
+ * Node status affect manual recovery code path only. If SD_CLUSTER_FLAG_MANUAL
+ * not set, the status of all the nodes in the cluser is RUNNING.
+ *
+ * Node is online:
+ *
+ * 1) RUNNING - can server both read and write
+ * 2) RECOVER - can server only write
+ *
+ * Node is offline:
+ *
+ * Neither read nor write could be sent to this node but the remaining nodes are
+ * not in recovery, meaning the data replica on this node will not be recovered
+ * immediately. Instead, we exepct this node to come back. Once the node is back
+ * the recovery of the delta data during the downtime takes place only on this
+ * node as opposed to auto-recovery, that is, node event will cause the whole
+ * cluster to be in recovery.
+ *
+ */
+enum node_status {
+	NODE_STATUS_RUNNING = 0,
+	NODE_STATUS_RECOVER,
+	NODE_STATUS_OFFLINE,
+};
+
 struct node_id {
 	uint8_t addr[16];
 	uint16_t port;
 	uint8_t io_addr[16];
 	uint16_t io_port;
-	uint8_t gone;
+	uint8_t status;
 	uint8_t pad[3];
 };
 

@@ -287,7 +287,8 @@ static int gateway_replication_read(struct request *req)
 		if (vnode_is_local(v))
 			continue;
 
-		if (v->node->nid.gone)
+		/* If node is in recovery or offline, we don't read from it */
+		if (v->node->nid.status != NODE_STATUS_RUNNING)
 			continue;
 		/*
 		 * We need to re-init it because rsp and req share the same
@@ -520,7 +521,13 @@ static int gateway_forward_request(struct request *req)
 		const struct node_id *nid;
 
 		nid = &target_nodes[i]->nid;
-		if (nid->gone)
+		/*
+		 * Only when node is offline, we skip to write to it. This means
+		 * that our write might be blocked on the target node during its
+		 * recovery, but this is the best way to keep the delta data
+		 * scyn code as simple as possible.
+		 */
+		if (nid->status == NODE_STATUS_OFFLINE)
 			continue;
 
 		sfd = sockfd_cache_get(nid);

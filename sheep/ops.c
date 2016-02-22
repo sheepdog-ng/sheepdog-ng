@@ -664,6 +664,23 @@ static int cluster_recovery_completion(const struct sd_req *req,
 
 	node = (struct sd_node *)data;
 
+	if (sys->cinfo.flags & SD_CLUSTER_FLAG_MANUAL) {
+		struct vnode_info *cur_vinfo = get_vnode_info();
+		struct sd_node *n = rb_search(&cur_vinfo->nroot, node, rb,
+					      node_cmp);
+		if (n) {
+			sd_debug("%s back", node_to_str(node));
+			n->nid.status = NODE_STATUS_RUNNING;
+			if (node_is_local(n))
+				sys->this_node.nid.status = NODE_STATUS_RUNNING;
+		} else {
+			sd_err("can't find %s", node_to_str(node));
+		}
+		put_vnode_info(cur_vinfo);
+		return SD_RES_SUCCESS;
+	}
+
+
 	if (latest_epoch > epoch)
 		return SD_RES_SUCCESS;
 

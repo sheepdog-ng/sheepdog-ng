@@ -1075,7 +1075,7 @@ int start_recovery(struct vnode_info *cur_vinfo, struct vnode_info *old_vinfo,
 	rinfo->vinfo_array = xzalloc(sizeof(struct vnode_info *) *
 				     rinfo->max_epoch);
 	sd_init_mutex(&rinfo->vinfo_lock);
-	if (epoch_lifted)
+	if (epoch_lifted || sys->cinfo.flags & SD_CLUSTER_FLAG_MANUAL)
 		rinfo->notify_complete = true; /* Reweight or node recovery */
 	else
 		rinfo->notify_complete = false; /* MD recovery */
