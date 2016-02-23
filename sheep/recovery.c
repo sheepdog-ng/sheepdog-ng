@@ -1109,6 +1109,7 @@ static void queue_recovery_work(struct recovery_info *rinfo)
 	case RW_RECOVER_OBJ:
 		row = xzalloc(sizeof(*row));
 		row->oid = rinfo->oids[rinfo->next];
+		row->stop = false;
 
 		rw = &row->base;
 		rw->work.fn = recover_object_work;

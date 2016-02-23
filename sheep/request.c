@@ -656,6 +656,11 @@ static struct request *alloc_request(struct client_info *ci,
 		}
 	}
 
+	INIT_LIST_NODE(&req->pending_list);
+	INIT_LIST_NODE(&req->request_list);
+	req->local = false;
+	req->local_req_efd = 0;
+
 	req->ci = ci;
 	refcount_inc(&ci->refcnt);
 
