@@ -123,7 +123,7 @@
 			 SD_FLAG_CMD_CACHE | SD_FLAG_CMD_DIRECT | \
 			 SD_FLAG_CMD_PIGGYBACK | SD_FLAG_CMD_RECOVERY | \
 			 SD_FLAG_CMD_CREAT | SD_FLAG_CMD_EXCL | \
-			 SD_FLAG_CMD_DEL)
+			 SD_FLAG_CMD_DEL | SD_FLAG_CMD_TGT)
 
 /* internal error return values, must be above 0x80 */
 #define SD_RES_OLD_NODE_VER  0x81 /* Request has an old epoch */
