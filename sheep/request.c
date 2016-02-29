@@ -452,11 +452,19 @@ static void queue_request(struct request *req)
 		goto done;
 	case SD_STATUS_WAIT:
 		if (!is_force_op(req->op)) {
-			if (sys->cinfo.ctime == 0)
+			if (sys->cinfo.ctime == 0) {
 				rsp->result = SD_RES_WAIT_FOR_FORMAT;
-			else
-				rsp->result = SD_RES_WAIT_FOR_JOIN;
-			goto done;
+				goto done;
+			} else {
+				/*
+				* If the status is SD_STATUS_WAIT, we
+				* should put the request in the wait
+				* queue,expecting to be wake up after
+				* rejoin the cluster or recovery
+				*/
+				sleep_on_wait_queue(req);
+				return;
+			}
 		}
 		break;
 	default:
