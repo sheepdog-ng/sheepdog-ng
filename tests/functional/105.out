@@ -1,0 +1,15 @@
+QA output created by 105
+using backend plain store
+Cluster status: running, auto-recovery disabled
+
+Cluster created at DATE
+
+Epoch Time           Version
+DATE      1 [127.0.0.1:7000, 127.0.0.1:7001, 127.0.0.1:7002]
+  Id   Host:Port         V-Nodes       Zone
+   0   127.0.0.1:7000      	128          0
+   1   127.0.0.1:7001      	128          1
+   2   127.0.0.1:7002      	128          2
+
+Offline: [127.0.0.1:7001, ]
+finish check&repair test

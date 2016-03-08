@@ -1,0 +1,31 @@
+#!/bin/bash
+
+# Test recovery of static hash ring
+
+. ./common
+
+for i in `seq 0 2`; do
+    _start_sheep $i
+done
+
+_wait_for_sheep 3
+
+_cluster_format -c 2 -s
+
+$DOG vdi create test 1000M
+
+_kill_sheep 1
+_wait_for_sheep_stop 1
+
+$DOG cluster info | _filter_cluster_info
+
+$DOG node list
+
+_random | $DOG vdi write test &
+
+sleep 1
+
+_start_sheep 1
+_wait_for_sheep_recovery 0
+
+$DOG vdi check test

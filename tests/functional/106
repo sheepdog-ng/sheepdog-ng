@@ -1,0 +1,60 @@
+#!/bin/bash
+
+# Test some dog comannds with auto-recovery disabled
+
+. ./common
+
+for i in `seq 0 2`; do
+    _start_sheep $i
+done
+
+_wait_for_sheep 3
+
+_cluster_format -c 2 -s
+
+$DOG vdi create test 100M
+
+_random | $DOG vdi write test
+
+_kill_sheep 1
+_wait_for_sheep_stop 1
+
+$DOG cluster info | _filter_cluster_info
+$DOG node list
+$DOG node recovery
+
+_random | $DOG vdi write test
+
+_start_sheep 1
+_wait_for_sheep 3
+_start_sheep 3
+sleep 1
+
+$DOG cluster info | _filter_cluster_info
+$DOG node list
+$DOG cluster info -p 7003
+
+_kill_sheep 1
+_wait_for_sheep_stop 1
+rm $STORE/1 -rf
+_start_sheep 1
+sleep 1
+$DOG cluster info -p 7001 | _filter_cluster_info
+
+$DOG cluster reconfig
+_wait_for_sheep_recovery 0
+$DOG cluster info | _filter_cluster_info
+$DOG node list
+
+$DOG cluster shutdown
+_wait_for_sheep_stop
+
+for i in `seq 0 3`; do
+    _start_sheep $i
+done
+
+_wait_for_sheep 4
+
+$DOG node recovery
+$DOG cluster info | _filter_cluster_info
+$DOG node list
