@@ -463,6 +463,7 @@ bool is_peer_op(const struct sd_op_template *op);
 bool is_gateway_op(const struct sd_op_template *op);
 bool is_force_op(const struct sd_op_template *op);
 bool is_logging_op(const struct sd_op_template *op);
+bool is_null_op(const struct sd_op_template *op);
 bool has_process_work(const struct sd_op_template *op);
 bool has_process_main(const struct sd_op_template *op);
 void do_process_work(struct work *work);
@@ -470,6 +471,7 @@ int do_process_main(const struct sd_op_template *op, const struct sd_req *req,
 		    struct sd_rsp *rsp, void *data,
 		    const struct sd_node *sender);
 int gateway_to_peer_opcode(int opcode);
+int run_null_request(struct request *req);
 
 static inline bool vnode_is_local(const struct sd_vnode *v)
 {

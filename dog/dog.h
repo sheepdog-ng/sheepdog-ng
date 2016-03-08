@@ -108,6 +108,8 @@ int read_vdi_obj(const char *vdiname, int snapid, const char *tag,
 struct timespec get_time_tick(void);
 double get_time_interval(const struct timespec *start,
 						 const struct timespec *end);
+bool node_dead(struct sd_node *node);
+
 
 extern struct command vdi_command;
 extern struct command node_command;

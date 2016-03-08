@@ -234,15 +234,17 @@ static void print_nodes_diff(const struct epoch_log *log,
 static int cluster_info(int argc, char **argv)
 {
 	int i, ret;
-	struct sd_req hdr;
+	struct sd_req hdr, req;
 	struct sd_rsp *rsp = (struct sd_rsp *)&hdr;
-	struct epoch_log *logs, *log, *last_log = NULL;
+	struct epoch_log *logs, *log = NULL, *last_log = NULL;
 	char *next_log;
 	int nr_logs, log_length;
 	time_t ti, ct;
 	struct tm tm;
 	char time_str[128];
 	uint32_t nodes_nr;
+	struct sd_node dummy;
+	struct node_id mynid;
 
 	nodes_nr = sd_nodes_nr;
 	log_length = sd_epoch * (sizeof(struct epoch_log)
@@ -265,12 +267,28 @@ retry:
 		goto retry;
 	}
 
+	sd_init_req(&req, SD_OP_GET_NID);
+	req.data_length = sizeof(struct node_id);
+	ret = dog_exec_req(&sd_nid, &req, &mynid);
+	if (ret)
+		goto error;
+	dummy.nid = mynid;
+	if (!rb_search(&sd_nroot, &dummy, rb, node_cmp)) {
+		printf("%s not yet join the cluster. You may try 'dog cluster"
+		       " reconfig' to manually add it.\n",
+		       addr_to_str(mynid.addr, mynid.port));
+		goto error;
+	}
+
 	/* show cluster status */
 	if (!raw_output)
 		printf("Cluster status: ");
-	if (rsp->result == SD_RES_SUCCESS)
-		printf("running, auto-recovery enabled\n");
-	else
+	if (rsp->result == SD_RES_SUCCESS) {
+		if (logs->flags & SD_CLUSTER_FLAG_MANUAL)
+			printf("running, auto-recovery disabled\n");
+		else
+			printf("running, auto-recovery enabled\n");
+	} else
 		printf("%s\n", sd_strerror(rsp->result));
 
 	if (verbose) {

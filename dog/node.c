@@ -32,16 +32,51 @@ static void cal_total_vdi_size(uint32_t vid, const char *name, const char *tag,
 static int node_list(int argc, char **argv)
 {
 	struct sd_node *n;
+	struct rb_root oroot = RB_ROOT, rroot = RB_ROOT;
 	int i = 0;
 
 	if (!raw_output)
 		printf("  Id   Host:Port         V-Nodes       Zone\n");
 	rb_for_each_entry(n, &sd_nroot, rb) {
-		const char *host = addr_to_str(n->nid.addr, n->nid.port);
+		if (n->nid.status == NODE_STATUS_OFFLINE || node_dead(n)) {
+			struct sd_node *t = xmalloc(sizeof(*t));
+			*t = *n;
+			rb_insert(&oroot, t, rb, node_cmp);
+		} else if(n->nid.status == NODE_STATUS_RECOVER) {
+			struct sd_node *t = xmalloc(sizeof(*t));
+			*t = *n;
+			rb_insert(&rroot, n, rb, node_cmp);
+		}
 
 		printf(raw_output ? "%d %s %d %u\n" : "%4d   %-20s\t%2d%11u\n",
-		       i++, host, n->nr_vnodes, n->zone);
+		       i++, addr_to_str(n->nid.addr, n->nid.port),
+		       n->nr_vnodes, n->zone);
 	}
+
+	if (rroot.nr) {
+		struct sd_node *node;
+
+		printf("\nRecover: [");
+		rb_for_each_entry(node, &rroot, rb) {
+			printf("%s, ",
+			       addr_to_str(node->nid.addr, node->nid.port));
+		}
+		printf("\b\b]\n");
+	}
+
+	if (oroot.nr) {
+		struct sd_node *node;
+
+		printf("\nOffline: [");
+		rb_for_each_entry(node, &oroot, rb) {
+			printf("%s, ",
+			       addr_to_str(node->nid.addr, node->nid.port));
+		}
+		printf("\b\b]\n");
+	}
+
+	rb_destroy(&rroot, struct sd_node, rb);
+	rb_destroy(&oroot, struct sd_node, rb);
 
 	return EXIT_SUCCESS;
 }
@@ -202,6 +237,9 @@ static int node_recovery(int argc, char **argv)
 		struct sd_rsp *rsp = (struct sd_rsp *)&req;
 		struct recovery_state state;
 
+		if (n->nid.status == NODE_STATUS_OFFLINE || node_dead(n))
+			continue;
+
 		memset(&state, 0, sizeof(state));
 
 		sd_init_req(&req, SD_OP_STAT_RECOVERY);
@@ -243,6 +281,63 @@ static struct sd_node *idx_to_node(struct rb_root *nroot, int idx)
 		n = rb_entry(rb_next(&n->rb), struct sd_node, rb);
 
 	return n;
+}
+
+static int node_ping(int argc, char **argv)
+{
+	int node_id, ret;
+	struct sd_req req;
+	struct sd_rsp *rsp = (struct sd_rsp *)&req;
+	const char *p;
+	struct node_id *nid = NULL, rid;
+
+	if (node_cmd_data.local)
+		nid = &sd_nid;
+
+	if (optind < argc) {
+		if (nid) {
+			sd_err("don't use -l option and specify node id at the"
+			       " same time");
+			exit(EXIT_USAGE);
+		}
+
+		p = argv[optind++];
+
+		if (!is_numeric(p)) {
+			sd_err("Invalid node id '%s', please specify a numeric"
+			       " value", p);
+			exit(EXIT_USAGE);
+		}
+
+		node_id = strtol(p, NULL, 10);
+		if (node_id < 0 || node_id >= sd_nodes_nr) {
+			sd_err("Invalid node id '%d'", node_id);
+			exit(EXIT_USAGE);
+		}
+
+		nid = &idx_to_node(&sd_nroot, node_id)->nid;
+	}
+
+	if (!nid) {
+		sd_err("please specify -l option or node id");
+		exit(EXIT_USAGE);
+	}
+
+	sd_init_req(&req, SD_OP_GET_NID);
+	req.data_length = sizeof(struct node_id);
+	ret = dog_exec_req(nid, &req, &rid);
+	if (ret) {
+		sd_err("Node %s is unreachable",
+		       addr_to_str(nid->addr, nid->port));
+		exit(EXIT_FAILURE);
+	}
+	if (rsp->result != SD_RES_SUCCESS) {
+		sd_err("%s", sd_strerror(rsp->result));
+		exit(EXIT_FAILURE);
+	}
+	printf("Feels good from %s\n", addr_to_str(rid.addr, rid.port));
+
+	return EXIT_SUCCESS;
 }
 
 static int node_kill(int argc, char **argv)
@@ -640,6 +735,8 @@ static struct subcommand node_cmd[] = {
 	 0, node_stat, node_options},
 	{"log", NULL, "aphT", "show or set log level of the node", node_log_cmd,
 	 CMD_NEED_ARG, node_log},
+	{"ping", "<node id>", "aprhlT", "ping node", NULL,
+	 CMD_NEED_NODELIST, node_ping, node_options},
 	{NULL,},
 };
 

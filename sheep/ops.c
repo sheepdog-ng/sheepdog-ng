@@ -13,10 +13,11 @@
 #include "trace/trace.h"
 
 enum sd_op_type {
-	SD_OP_TYPE_CLUSTER = 1, /* cluster operations */
-	SD_OP_TYPE_LOCAL,       /* local operations */
-	SD_OP_TYPE_PEER,          /* io operations */
-	SD_OP_TYPE_GATEWAY,	/* gateway operations */
+	SD_OP_TYPE_CLUSTER = 1, /* Cluster operations */
+	SD_OP_TYPE_LOCAL,       /* Local operations */
+	SD_OP_TYPE_PEER,          /* IO operations */
+	SD_OP_TYPE_GATEWAY,	/* Gateway operations */
+	SD_OP_TYPE_NONE,	/* Non-queued operations */
 };
 
 struct sd_op_template {
@@ -1168,7 +1169,22 @@ static int local_get_cluster_default(const struct sd_req *req,
 	return SD_RES_SUCCESS;
 }
 
+static int null_get_nid(struct request *req)
+{
+	memcpy(req->data, &sys->this_node.nid, sizeof(struct node_id));
+	req->rp.data_length = sizeof(struct node_id);
+	return SD_RES_SUCCESS;
+}
+
 static struct sd_op_template sd_ops[] = {
+
+	/* NULL operations */
+	[SD_OP_GET_NID] = {
+		.name = "NULL",
+		.type = SD_OP_TYPE_NONE,
+		.force = true,
+		.process_work = null_get_nid,
+	},
 
 	/* cluster operations */
 	[SD_OP_NEW_VDI] = {
@@ -1560,6 +1576,11 @@ const char *op_name(const struct sd_op_template *op)
 	return op->name;
 }
 
+bool is_null_op(const struct sd_op_template *op)
+{
+	return op != NULL && op->type == SD_OP_TYPE_NONE;
+}
+
 bool is_cluster_op(const struct sd_op_template *op)
 {
 	return op != NULL && op->type == SD_OP_TYPE_CLUSTER;
@@ -1624,6 +1645,11 @@ int do_process_main(const struct sd_op_template *op, const struct sd_req *req,
 		    const struct sd_node *sender)
 {
 	return op->process_main(req, rsp, data, sender);
+}
+
+int run_null_request(struct request *req)
+{
+	return req->op->process_work(req);
 }
 
 static int map_table[] = {

@@ -514,3 +514,20 @@ uint8_t parse_copy(const char *str, uint8_t *copy_policy)
 	copy = copy + parity;
 	return copy;
 }
+
+bool node_dead(struct sd_node *node)
+{
+	struct sd_req req;
+	struct node_id rid;
+	int ret;
+	FILE *uninitialized_var(f);
+
+	f = freopen("/dev/null", "w", stderr);
+	sd_init_req(&req, SD_OP_GET_NID);
+	req.data_length = sizeof(struct node_id);
+	ret = dog_exec_req(&node->nid, &req, &rid);
+	if (ret)
+		return true;
+
+	return false;
+}

@@ -484,6 +484,9 @@ static void queue_request(struct request *req)
 	} else if (is_cluster_op(req->op)) {
 		hdr->epoch = sys->cinfo.epoch;
 		queue_cluster_request(req);
+	} else if (is_null_op(req->op)) {
+		req->rp.result = run_null_request(req);
+		goto done;
 	} else {
 		sd_err("unknown operation %d", hdr->opcode);
 		rsp->result = SD_RES_SYSTEM_ERROR;

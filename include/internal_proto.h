@@ -61,7 +61,7 @@
 /* #define SD_OP_SNAPSHOT       0x91 deleted */
 /* #define SD_OP_RESTORE        0x92 deleted */
 /* #define SD_OP_GET_SNAP_FILE  0x93 deleted */
-/* #define SD_OP_CLEANUP        0x94 deleted */
+#define SD_OP_GET_NID        0x94
 #define SD_OP_TRACE_STATUS   0x95
 #define SD_OP_TRACE_READ_BUF 0x96
 #define SD_OP_STAT_RECOVERY  0x97
