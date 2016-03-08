@@ -678,7 +678,7 @@ static void manual_update_cluster_info(const struct sd_node *joined)
 		assert(current_vnode_info == NULL);
 		main_thread_set(current_vnode_info, alloc_vnode_info(&nroot));
 
-		if (sys->cinfo.status == SD_STATUS_OK &&
+		if (sys->cinfo.last_status == SD_STATUS_OK &&
 		    rb_search(&nroot, joined, rb, node_cmp) &&
 		    (joined->nr_vnodes || node_in_recovery()))
 			start_recovery(main_thread_get(current_vnode_info),
@@ -686,18 +686,31 @@ static void manual_update_cluster_info(const struct sd_node *joined)
 				       false);
 
 		rb_destroy(&nroot, struct sd_node, rb);
+		update_epoch_log(sys->cinfo.epoch, sys->cinfo.nodes,
+				 sys->cinfo.nr_nodes, false);
 	} else {
 		struct vnode_info *cur_vinfo = get_vnode_info();
 		struct sd_node *n = rb_search(&cur_vinfo->nroot,
 					      (struct sd_node *)joined, rb,
 					      node_cmp);
 		if (n) {
-			sd_debug("%s back", node_to_str(joined));
-			n->nid.status = NODE_STATUS_RECOVER;
+			sd_debug("%s back, status %d",
+				 node_to_str(joined), joined->nid.status);
+			n->nid.status = joined->nid.status;
 		} else {
 			sd_debug("can't find %s", node_to_str(joined));
 		}
 		put_vnode_info(cur_vinfo);
+	}
+
+	if (sys->cinfo.last_status != SD_STATUS_OK &&
+	    sys->cinfo.status == SD_STATUS_OK) {
+		set_cluster_shutdown(false);
+		if (sys->this_node.nid.status == NODE_STATUS_RECOVER &&
+		    sys->this_node.nr_vnodes)
+			start_recovery(main_thread_get(current_vnode_info),
+				       main_thread_get(current_vnode_info),
+				       false);
 	}
 }
 
@@ -749,7 +762,8 @@ static void update_cluster_info(const struct cluster_info *cinfo,
 				size_t nr_nodes)
 {
 
-	sd_debug("status = %d, epoch = %d", cinfo->status, cinfo->epoch);
+	sd_debug("status = %d, epoch = %d, flags = %d", cinfo->status,
+		 cinfo->epoch, cinfo->flags);
 
 	if (!sys->gateway_only)
 		setup_backend_store(cinfo, joined);
@@ -849,12 +863,13 @@ main_fn bool sd_join_handler(const struct sd_node *joining,
 		status = sys->cinfo.status;
 
 	cluster_info_copy(cinfo, &sys->cinfo);
+	cinfo->last_status = sys->cinfo.status;
 	cinfo->status = status;
 	cinfo->proto_ver = SD_SHEEP_PROTO_VER;
 
-	sd_debug("%s: cluster_status = 0x%x",
+	sd_debug("%s: status %x, last_status %x",
 		 addr_to_str(joining->nid.addr, joining->nid.port),
-		 cinfo->status);
+		 cinfo->status, cinfo->last_status);
 
 	return true;
 }
@@ -863,7 +878,15 @@ static int send_join_request(void)
 {
 	struct sd_node *n = &sys->this_node;
 
-	sd_info("%s going to join the cluster", node_to_str(n));
+	if (!(sys->cinfo.flags & SD_CLUSTER_FLAG_MANUAL) ||
+	    !is_cluster_formatted() || was_cluster_shutdowned()) {
+		sys->this_node.nid.status = NODE_STATUS_RUNNING;
+	} else {
+		sys->this_node.nid.status = NODE_STATUS_RECOVER;
+	}
+
+	sd_info("%s going to join the cluster, status %d",
+		node_to_str(n), sys->this_node.nid.status);
 	return sys->cdrv->join(n, &sys->cinfo, sizeof(sys->cinfo));
 }
 
@@ -991,7 +1014,7 @@ main_fn void sd_accept_handler(const struct sd_node *joined,
 
 	cluster_info_copy(&sys->cinfo, cinfo);
 
-	sd_debug("join %s", node_to_str(joined));
+	sd_debug("join %s, status %d", node_to_str(joined), joined->nid.status);
 	rb_for_each_entry(n, nroot, rb) {
 		sd_debug("%s", node_to_str(n));
 	}
