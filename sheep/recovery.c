@@ -676,26 +676,18 @@ static void free_recovery_info(struct recovery_info *rinfo)
 	free(rinfo);
 }
 
-/* Return true if next recovery work is queued. */
-static inline bool run_next_rw(void)
+static inline void kick_next_rw(void)
 {
 	struct recovery_info *nrinfo = uatomic_read(&next_rinfo);
 	struct recovery_info *cur = main_thread_get(current_rinfo);
 
-	if (nrinfo == NULL)
-		return false;
-
-	/* Some objects are still in recovery. */
-	if (cur->recover_threads) {
-		sd_debug("some threads still running, wait for completion");
-		return true;
-	}
-
 	nrinfo = uatomic_xchg_ptr(&next_rinfo, NULL);
+
 	/*
-	 * When md recovery supersedes the reweight or node recovery, we need to
-	 * notify completion.
-	 */
+	* When md recovery supersedes the reweight or node recovery,
+	* we need to notify completion.
+	*/
+
 	if (!nrinfo->notify_complete && cur->notify_complete)
 		nrinfo->notify_complete = true;
 
@@ -712,6 +704,25 @@ static inline bool run_next_rw(void)
 	main_thread_set(current_rinfo, nrinfo);
 	wakeup_all_requests();
 	queue_recovery_work(nrinfo);
+}
+
+/* Return true if next recovery work is queued. */
+static inline bool run_next_rw(void)
+{
+	struct recovery_info *nrinfo = uatomic_read(&next_rinfo);
+	struct recovery_info *cur = main_thread_get(current_rinfo);
+
+	if (nrinfo == NULL)
+		return false;
+
+	/* Some objects are still in recovery. */
+	if (cur->recover_threads) {
+		sd_debug("some threads still running, wait for completion");
+		return true;
+	}
+
+	kick_next_rw();
+
 	sd_debug("recovery work is superseded");
 	return true;
 }
@@ -1079,10 +1090,21 @@ int start_recovery(struct vnode_info *cur_vinfo, struct vnode_info *old_vinfo,
 	if (main_thread_get(current_rinfo) != NULL) {
 		/* skip the previous epoch recovery */
 		struct recovery_info *nrinfo;
+		struct recovery_info *cinfo = main_thread_get(current_rinfo);
 		nrinfo = uatomic_xchg_ptr(&next_rinfo, rinfo);
 		if (nrinfo)
 			free_recovery_info(nrinfo);
 		sd_debug("recovery skipped");
+
+		/*
+		 * No threads remain to kick next recovery and current recovery
+		 * is stopped and expecting to be replaced by next one, we have
+		 * to kick it right here for this corner case.
+		 */
+		if (cinfo->count > 0 &&
+		    cinfo->next >= cinfo->count &&
+		    0 == cinfo->recover_threads)
+			kick_next_rw();
 	} else {
 		main_thread_set(current_rinfo, rinfo);
 		queue_recovery_work(rinfo);
