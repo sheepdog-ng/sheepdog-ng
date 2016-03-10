@@ -29,3 +29,6 @@ _start_sheep 1
 _wait_for_sheep_recovery 0
 
 $DOG vdi check test
+
+wait
+_node_info

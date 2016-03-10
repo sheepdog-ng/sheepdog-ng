@@ -13,3 +13,7 @@ DATE      1 [127.0.0.1:7000, 127.0.0.1:7001, 127.0.0.1:7002]
 
 Offline: [127.0.0.1:7001, ]
 finish check&repair test
+STORE	DATA	VDI	VMSTATE	ATTR	LEDGER	STALE
+0	153	0	0	0	0	0
+1	179	1	0	0	0	0
+2	168	1	0	0	0	0
