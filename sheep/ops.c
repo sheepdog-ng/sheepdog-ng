@@ -670,17 +670,36 @@ static int cluster_recovery_completion(const struct sd_req *req,
 		struct sd_node *n = rb_search(&cur_vinfo->nroot, node, rb,
 					      node_cmp);
 		if (n) {
+			struct sd_node *t;
+
 			sd_debug("%s back", node_to_str(node));
 			n->nid.status = NODE_STATUS_RUNNING;
 			if (node_is_local(n))
 				sys->this_node.nid.status = NODE_STATUS_RUNNING;
+
+			/* FIXME: unify auto-recovery and manual cleanup */
+			rb_for_each_entry(t, &cur_vinfo->nroot, rb) {
+				sd_debug("%s, status %d", node_to_str(t),
+					 t->nid.status);
+				if (t->nid.status == NODE_STATUS_RECOVER)
+					goto out;
+			}
+			sd_notice("live nodes are recovered, epoch %d", epoch);
+			if (cur_vinfo->nr_zones >= ec_max_data_strip() &&
+			    sd_store && sd_store->cleanup)
+				sd_store->cleanup();
 		} else {
 			sd_err("can't find %s", node_to_str(node));
+		}
+out:
+		for (i = 0; i < sys->cinfo.nr_nodes; i++) {
+			if (!node_cmp(node, sys->cinfo.nodes + i))
+				sys->cinfo.nodes[i].nid.status =
+					NODE_STATUS_RUNNING;
 		}
 		put_vnode_info(cur_vinfo);
 		return SD_RES_SUCCESS;
 	}
-
 
 	if (latest_epoch > epoch)
 		return SD_RES_SUCCESS;

@@ -664,9 +664,9 @@ static bool membership_changed(const struct cluster_info *cinfo,
 
 static void manual_update_cluster_info(const struct sd_node *joined)
 {
-
 	if (node_is_local(joined)) {
 		struct rb_root nroot = RB_ROOT;
+		struct sd_node *n;
 
 		for (int i = 0; i < sys->cinfo.nr_nodes; i++) {
 			struct sd_node *new = xmalloc(sizeof(*new));
@@ -677,9 +677,13 @@ static void manual_update_cluster_info(const struct sd_node *joined)
 
 		assert(current_vnode_info == NULL);
 		main_thread_set(current_vnode_info, alloc_vnode_info(&nroot));
-
+		n = rb_search(&main_thread_get(current_vnode_info)->nroot,
+			      (struct sd_node *)joined, rb,
+			      node_cmp);
+		if (n)
+			n->nid.status = joined->nid.status;
 		if (sys->cinfo.last_status == SD_STATUS_OK &&
-		    rb_search(&nroot, joined, rb, node_cmp) &&
+		    n &&
 		    (joined->nr_vnodes || node_in_recovery()))
 			start_recovery(main_thread_get(current_vnode_info),
 				       main_thread_get(current_vnode_info),
@@ -701,6 +705,11 @@ static void manual_update_cluster_info(const struct sd_node *joined)
 			sd_debug("can't find %s", node_to_str(joined));
 		}
 		put_vnode_info(cur_vinfo);
+	}
+
+	for (int i = 0; i < sys->cinfo.nr_nodes; i++) {
+		if (!node_cmp(joined, sys->cinfo.nodes + i))
+			sys->cinfo.nodes[i].nid.status = joined->nid.status;
 	}
 
 	if (sys->cinfo.last_status != SD_STATUS_OK &&
@@ -879,7 +888,7 @@ static int send_join_request(void)
 	struct sd_node *n = &sys->this_node;
 
 	if (!(sys->cinfo.flags & SD_CLUSTER_FLAG_MANUAL) ||
-	    !is_cluster_formatted() || was_cluster_shutdowned()) {
+	    was_cluster_shutdowned()) {
 		sys->this_node.nid.status = NODE_STATUS_RUNNING;
 	} else {
 		sys->this_node.nid.status = NODE_STATUS_RECOVER;
@@ -1051,6 +1060,10 @@ static void manual_leave_handler(const struct sd_node *left)
 		n->nid.status = NODE_STATUS_OFFLINE;
 	} else {
 		sd_debug("can't find %s", node_to_str(left));
+	}
+	for (int i = 0; i < sys->cinfo.nr_nodes; i++) {
+		if (!node_cmp(left, sys->cinfo.nodes + i))
+			sys->cinfo.nodes[i].nid.status = NODE_STATUS_OFFLINE;
 	}
 	put_vnode_info(cur_vinfo);
 }
