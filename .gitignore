@@ -41,6 +41,7 @@ sheep/sheep
 sheepfs/sheepfs
 shepherd/shepherd
 tools/zk_control
+tools/create-diff-object
 tests/unit/dog/test_common
 tests/unit/sheep/test_vdi
 tests/unit/sheep/test_cluster_driver
