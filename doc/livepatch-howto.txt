@@ -1,0 +1,75 @@
+How to use sheep livepatch feature
+==================================
+1. enable livepatch feature before make
+    ./configure --enable-livepatch
+
+    NOTE: livepatch cannot be used with tracer
+
+2. prepare a text patch
+   e.g. following is a patch in diff format named hello.patch
+
+    diff --git a/sheep/vdi.c b/sheep/vdi.c
+    index d65b4a4..3f862e1 100644
+    --- a/sheep/vdi.c
+    +++ b/sheep/vdi.c
+    @@ -625,6 +625,8 @@ int vdi_create(const struct vdi_iocb *iocb, uint32_t *new_vid)
+            struct vdi_info info = {};
+            int ret;
+
+    +    sd_info("hello, livepatch");
+    +
+            ret = vdi_lookup(iocb, &info);
+            switch (ret) {
+            case SD_RES_SUCCESS:
+
+3. use livepatch-build to convert the text patch to a livepatch
+    first see how to use livepatch-build
+    # livepatch-build
+    Usage: /usr/sbin/livepatch-build <patch> <sheepdog-tree>
+    patch        : [patch-name].patch file
+    sheepdog-tree: source code directory for sheepdog-ng
+
+    # livepatch-build hello.patch sheepdog-ng
+    entering sheep directory
+    building patched sheep...
+      CC       vdi.o
+      CCLD     sheep
+    Built sheep
+    building orig sheep...
+      CC       vdi.o
+      CCLD     sheep
+    Built sheep
+    extracting changed functions...
+    building live patch...
+    created patch: /home/ghc/.livepatch/hello-patch.o
+    cleanup...
+    NOTE: patch stuff is cached @ /home/ghc/.livepatch
+    Done
+
+    now you have a livepatch hello-patch.o
+
+4. install the livepatch
+    there is a patch/ directory right under the meta data path of your running sheep,
+    just run
+    # sudo cp hello-patch.o
+    then the livepatch can be used by sheep
+
+5. use dog livepatch patch to patch your sheep
+    # dog livepatch patch hello-patch.o
+
+    NOTE: here just give the name of livepatch, not the path, sheep will look for
+    the patch in patch/ directory
+
+6. check result
+    the hello.patch above changes the behavior of command "dog vdi create",
+    so just run
+    # dog vdi create test 1g
+    then check the sheep.log for "hello, livepatch"
+
+7 use dog livepatch status to check patched livepatches
+    # dog livepatch status
+    Patches         Functions
+    hello-patch.o   [vdi_create]
+
+8 use dog livepatch unpatch to unpatch your sheep
+    # dog livepatch unpatch hello-patch.o
