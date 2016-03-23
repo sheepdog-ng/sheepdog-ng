@@ -1,0 +1,58 @@
+the design of sheep livepatch feature
+=====================================
+0. kpatch
+Sheep livepatch is inspired by kpatch, and use kpatch's create-diff-object tool
+with neccessary modifications to help to create elf-formatted livepatch.
+
+1. function hack base in theory
+Gcc provides options "-pg -mfentry" to generate to call to __fentry__
+function as the first instrunction of a normal function.
+The __fentry__function is for program profiling.
+e.g.
+
+    000000000040fa70 <vdi_create>:
+    40fa70:       e8 0b 47 ff ff          callq  404180 <__fentry__@plt>
+
+Then if we can replace the __fentry__ with self-defined functions, then we
+could make changes to the program logic.
+
+2. livepatch core
+Livepatch intends to replace a buggy function with a fixed one.
+
+    caller
+      |
+      |
+    buggy_function()
+        call     --------->   livepatch_caller(assembly)
+                                     |
+                                     |
+                                   call     -------->   livepatch_handler()
+                                                               |
+                                                        (set return addr of
+                                                        livepatch_caller to
+                                                        addr of fixed_function)
+                                                               |
+                                     |      <--------       return
+                                     |
+                                     |
+                                   return   -------->     fixed_function()
+                                                               |
+                                                               |
+      |     <-----------------------------------------       return
+      |
+    return
+
+3. create loadable livepatch file
+Livepatch should place the fixed function code in a loadable file,
+just like a module(.ko) file to the kernel.
+To create such a file, we should first extract the binary code section
+of the fixed function by diff the object file compiled after patching
+the text patch and the original object file before patching. This is
+done by the tool create-diff-object borrowed from kpatch with neccesary
+adjustments.
+
+4. load livepatch into memory
+Livepatch should load the livepatch file into memory so that livepatch_caller
+knows where to jump to.
+This procedure resembles the proceduce as loading a kernel module which
+is done by cmd insmod.
