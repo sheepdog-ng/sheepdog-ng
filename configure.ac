@@ -242,6 +242,11 @@ AC_ARG_ENABLE([trace],
 	[ enable_trace="${enable_debug}" ],)
 AM_CONDITIONAL(BUILD_TRACE, test x$enable_trace = xyes)
 
+AC_ARG_ENABLE([livepatch],
+	[  --enable-livepatch       : enable livepatch],,
+	[ enable_livepatch="no" ],)
+AM_CONDITIONAL(BUILD_LIVEPATCH, test x$enable_livepatch = xyes)
+
 PKG_CHECK_MODULES([fuse],[fuse], HAVE_FUSE="yes", HAVE_FUSE="no")
 AC_ARG_ENABLE([sheepfs],
 	[  --enable-sheepfs         : enable sheepfs],,
@@ -374,6 +379,24 @@ if test "x${enable_trace}" = xyes; then
 	PACKAGE_FEATURES="$PACKAGE_FEATURES trace"
 fi
 
+if test "x${enable_livepatch}" = xyes; then
+	if test "x${enable_coverage}" = xyes; then
+		AC_MSG_ERROR(livepatch cannot be used with coverage options)
+	fi
+	if test "x${enable_trace}" = xyes; then
+		AC_MSG_ERROR(livepatch cannot be used with tracer)
+	fi
+	if [[[ $host != *x86_64* ]]]; then
+		AC_MSG_ERROR(livepatch can be used on x86_64 architectures)
+	fi
+	AC_CHECK_LIB([elf], [elf_begin],,
+		AC_MSG_ERROR(requires elfutils-libelf))
+	AC_CHECK_HEADERS([gelf.h],,
+		AC_MSG_ERROR(requires elfutils-libelf-devel))
+	AC_DEFINE_UNQUOTED([HAVE_LIVEPATCH], 1, [have livepatch])
+	PACKAGE_FEATURES="$PACKAGE_FEATURES livepatch"
+fi
+
 if test "x${enable_sheepfs}" = xyes; then
 	AC_CHECK_HEADERS([fuse.h],,
 		AC_MSG_ERROR(fuse.h header missing),
@@ -485,10 +508,24 @@ else
 	TRACE_CFLAGS=""
 fi
 
+if test "x${enable_livepatch}" = xyes && \
+		cc_supports_flag -pg && \
+        cc_supports_flag -mfentry && \
+		cc_supports_flag -fdata-sections && \
+		cc_supports_flag -ffunction-sections && \
+		cc_supports_flag -fno-common && \
+        cc_supports_flag -mcmodel=large; then
+	AC_MSG_NOTICE([Enabling trace (-pg -mfentry)])
+	AC_MSG_NOTICE([Supported flags for livepatch(-fdata-sections -ffunction-sections -fno-common -mcmodel=large)])
+    LIVEPATCH_CFLAGS="-pg -mfentry"
+else
+    LIVEPATCH_CFLAGS=""
+fi
+
 # final build of *FLAGS
 CFLAGS="$ENV_CFLAGS $OPT_CFLAGS $GDB_FLAGS $OS_CFLAGS \
-	$TRACE_CFLAGS $COVERAGE_CFLAGS $EXTRA_WARNINGS $WERROR_CFLAGS \
-	-D_GNU_SOURCE -D_LGPL_SOURCE -std=gnu99"
+	$TRACE_CFLAGS $LIVEPATCH_CFLAGS $COVERAGE_CFLAGS $EXTRA_WARNINGS \
+    $WERROR_CFLAGS -D_GNU_SOURCE -D_LGPL_SOURCE -std=gnu99"
 CPPFLAGS="$ENV_CPPFLAGS $ANSI_CPPFLAGS $OS_CPPFLAGS"
 LDFLAGS="$ENV_LDFLAGS $COVERAGE_LDFLAGS $OS_LDFLAGS"
 
@@ -544,7 +581,7 @@ AC_MSG_RESULT([  ANSI defined CPPFLAGS    = ${ANSI_CPPFLAGS}])
 AC_MSG_RESULT([  Coverage     CFLAGS      = ${COVERAGE_CFLAGS}])
 AC_MSG_RESULT([  Coverage     LDFLAGS     = ${COVERAGE_LDFLAGS}])
 AC_MSG_RESULT([  Fatal War.   CFLAGS      = ${WERROR_CFLAGS}])
-AC_MSG_RESULT([  Trace        CFLAGS      = ${TRACE_CFLAGS}])
+AC_MSG_RESULT([  Livepatch    CFLAGS      = ${LIVEPATCH_CFLAGS}])
 AC_MSG_RESULT([  Final        CFLAGS      = ${CFLAGS}])
 AC_MSG_RESULT([  Final        CPPFLAGS    = ${CPPFLAGS}])
 AC_MSG_RESULT([  Final        LDFLAGS     = ${LDFLAGS}])
