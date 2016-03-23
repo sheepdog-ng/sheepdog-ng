@@ -179,6 +179,9 @@ static void init_commands(const struct command **commands)
 #ifdef HAVE_TRACE
 		trace_command,
 #endif
+#ifdef HAVE_LIVEPATCH
+		livepatch_command,
+#endif
 #ifdef HAVE_NFS
 		nfs_command,
 #endif

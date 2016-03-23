@@ -29,7 +29,11 @@ dog_SOURCES		= farm/object_tree.c farm/sha1_file.c farm/snap.c \
 
 if BUILD_TRACE
 dog_SOURCES		+= trace.c
-override CFLAGS         := $(subst -pg,,$(CFLAGS))
+override CFLAGS         := $(subst -pg -mfentry,,$(CFLAGS))
+endif
+
+if BUILD_LIVEPATCH
+dog_SOURCES     += livepatch.c
 endif
 
 if BUILD_NFS

@@ -120,6 +120,10 @@ extern struct command alter_command;
 extern struct command trace_command;
 #endif /* HAVE_TRACE */
 
+#ifdef HAVE_LIVEPATCH
+extern struct command livepatch_command;
+#endif /* HAVE_LIVEPATCH */
+
 #ifdef HAVE_NFS
 extern struct command nfs_command;
 #endif /* HAVE_NFS */
