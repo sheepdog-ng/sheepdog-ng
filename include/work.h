@@ -66,10 +66,10 @@ void queue_work(struct work_queue *q, struct work *work);
 bool work_queue_empty(struct work_queue *q);
 int wq_trace_init(void);
 
-#ifdef HAVE_TRACE
+#if (defined HAVE_TRACE) || (defined HAVE_LIVEPATCH)
 void suspend_worker_threads(void);
 void resume_worker_threads(void);
-#endif	/* HAVE_TRACE */
+#endif	/* HAVE_TRACE || HAVE_LIVEPATCH*/
 
 typedef pthread_t sd_thread_t;
 int sd_thread_create(const char *, sd_thread_t *,
