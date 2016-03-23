@@ -14,6 +14,7 @@
 
 #include "sheep_priv.h"
 #include "trace/trace.h"
+#include "livepatch/livepatch.h"
 #include "option.h"
 
 #define EPOLL_SIZE 4096
@@ -882,6 +883,10 @@ int main(int argc, char **argv)
 	}
 
 	ret = trace_init();
+	if (ret)
+		goto cleanup_cluster;
+
+	ret = livepatch_init(dir);
 	if (ret)
 		goto cleanup_cluster;
 

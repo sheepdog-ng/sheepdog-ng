@@ -54,6 +54,10 @@ AM_CPPFLAGS		+= -DENABLE_TRACE
 sheep_SOURCES		+= trace/trace.c trace/mcount.S trace/graph.c trace/checker.c
 endif
 
+if BUILD_LIVEPATCH
+sheep_SOURCES		+= livepatch/livepatch.c livepatch/mcount.S livepatch/lookup.c
+endif
+
 sheep_LDADD	  	= ../lib/libsd.a -lpthread -lm\
 			  $(libcpg_LIBS) $(libcfg_LIBS) $(libacrd_LIBS) $(LIBS)
 
@@ -61,11 +65,16 @@ if BUILD_NFS
 sheep_LDADD		+= -lrt
 endif
 
+if BUILD_LIVEPATCH
+sheep_LDADD		+= -lelf -ldl
+endif
+
 sheep_DEPENDENCIES	= ../lib/libsd.a
 
 
-noinst_HEADERS		= sheep_priv.h cluster.h http/http.h trace/trace.h
-			  nfs/nfs.h nfs/fs.h
+noinst_HEADERS		= sheep_priv.h cluster.h http/http.h trace/trace.h \
+					  livepatch/livepatch.h livepatch/livepatch-patch.h livepatch/lookup.h \
+					  nfs/nfs.h nfs/fs.h
 
 EXTRA_DIST		= 
 

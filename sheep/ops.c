@@ -11,6 +11,7 @@
 
 #include "sheep_priv.h"
 #include "trace/trace.h"
+#include "livepatch/livepatch.h"
 
 enum sd_op_type {
 	SD_OP_TYPE_CLUSTER = 1, /* Cluster operations */
@@ -956,6 +957,26 @@ static int local_trace_read_buf(struct request *request)
 	return SD_RES_SUCCESS;
 }
 
+static int local_livepatch_patch(const struct sd_req *req, struct sd_rsp *rsp,
+                                 void *data, const struct sd_node *sender)
+{
+    return livepatch_patch(data);
+}
+
+static int local_livepatch_unpatch(const struct sd_req *req, struct sd_rsp *rsp,
+                                   void *data, const struct sd_node *sender)
+{
+    return livepatch_unpatch(data);
+}
+
+static int local_livepatch_status(const struct sd_req *req, struct sd_rsp *rsp,
+                                    void *data, const struct sd_node *sender)
+{
+    rsp->data_length = livepatch_status(data);
+
+    return SD_RES_SUCCESS;
+}
+
 static int local_kill_node(const struct sd_req *req, struct sd_rsp *rsp,
 			   void *data, const struct sd_node *sender)
 {
@@ -1404,6 +1425,27 @@ static struct sd_op_template sd_ops[] = {
 		.type = SD_OP_TYPE_LOCAL,
 		.force = true,
 		.process_work = local_trace_read_buf,
+	},
+
+	[SD_OP_LIVEPATCH_PATCH] = {
+		.name = "LIVEPATCH_PATCH",
+		.type = SD_OP_TYPE_CLUSTER,
+		.force = true,
+		.process_main = local_livepatch_patch,
+	},
+
+	[SD_OP_LIVEPATCH_UNPATCH] = {
+		.name = "LIVEPATCH_UNPATCH",
+		.type = SD_OP_TYPE_CLUSTER,
+		.force = true,
+		.process_main = local_livepatch_unpatch,
+	},
+
+	[SD_OP_LIVEPATCH_STATUS] = {
+		.name = "LIVEPATCH_STATUS",
+		.type = SD_OP_TYPE_LOCAL,
+		.force = true,
+		.process_main = local_livepatch_status,
 	},
 
 	[SD_OP_KILL_NODE] = {
