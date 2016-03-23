@@ -1,0 +1,120 @@
+# !/bin/bash
+#
+# Copyright (C) 2016 China Mobile Inc.
+#
+# Gui Hecheng <guihecheng@cmss.chinamobile.com>
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License version
+# 2 as published by the Free Software Foundation.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <http://www.gnu.org/licenses/>.
+
+usage() {
+    echo "Usage: $0 <patch> <sheepdog-tree>"
+    echo "    patch        : [patch-name].patch file"
+    echo "    sheepdog-tree: source code directory for sheepdog-ng"
+}
+
+if [ $# -ne 2 ]; then
+    usage
+    exit 1
+fi
+
+PATCH="$(realpath $1)"
+PATCHNAME="$(basename -s .patch $1)"
+SHEEPDOGDIR="$(realpath $2)"
+SHEEPDIR="$SHEEPDOGDIR/sheep"
+LIVEPATCHDIR="$SHEEPDIR/livepatch"
+HOOKDIR="$LIVEPATCHDIR/patch-hook"
+CACHEDIR="$HOME/.livepatch"
+
+CHANGED_OBJS=()
+
+ORIG_FLAGS="$(make -C $SHEEPDIR -np | grep "^CFLAGS = ")"
+EXTRA_CFLAGS="-fdata-sections -ffunction-sections -fno-common -mcmodel=large"
+CFLAGS="$ORIG_FLAGS $EXTRA_CFLAGS"
+
+# drop -ggbd3 which brings .debug_macro stuff
+# __fentry__ reloc PC32 not direct
+CFLAGS=$(echo $CFLAGS | sed "s/-ggdb3//g" | sed "s/^CFLAGS = //g")
+
+echo "entering sheep directory"
+cd $SHEEPDIR
+
+patch -p2 --dry-run < $PATCH | grep "^checking" | awk '{ print $3 }' > tmp
+i=0
+while read line; do
+    CHANGED_OBJS[$i]="$(echo $line | cut -d '.' -f 1).o"
+    i=$((i + 1))
+done < tmp
+rm -f tmp
+
+if [ ${#CHANGED_OBJS[@]} -eq 0 ]; then
+    echo "No changed objects, Exit"
+    exit 0
+fi
+
+echo "building patched sheep..."
+patch -p2 < $PATCH &> /dev/null
+make "CFLAGS = $CFLAGS"
+
+rm -f $CACHEDIR/livepatch-patch.o
+rm -f $CACHEDIR/patch.o
+
+rm -rf $CACHEDIR/patched_objs
+rm -rf $CACHEDIR/orig_objs
+rm -rf $CACHEDIR/diff_objs
+
+mkdir -p $CACHEDIR/patched_objs
+mkdir -p $CACHEDIR/orig_objs
+mkdir -p $CACHEDIR/diff_objs
+
+for obj in ${CHANGED_OBJS[@]}; do
+    cp $obj $CACHEDIR/patched_objs
+done
+
+echo "building orig sheep..."
+patch -p2 -R < $PATCH &> /dev/null
+make "CFLAGS = $CFLAGS"
+
+for obj in ${CHANGED_OBJS[@]}; do
+    cp $obj $CACHEDIR/orig_objs
+done
+
+cd - &> /dev/null
+
+sheep_exec=$(which sheep)
+
+echo "extracting changed functions..."
+for obj in ${CHANGED_OBJS[@]}; do
+    robj="$(basename $obj)"
+    create-diff-object $CACHEDIR/orig_objs/$robj         \
+                       $CACHEDIR/patched_objs/$robj      \
+                       $sheep_exec                       \
+                       $CACHEDIR/diff_objs/$robj         \
+                       -d &> $CACHEDIR/create-diff-object.log
+done
+
+echo "building live patch..."
+CFLAGS="$CFLAGS -I$SHEEPDOGDIR/include -I$LIVEPATCHDIR"
+gcc -c $HOOKDIR/patch-hook.c -o $CACHEDIR/patch-hook.o $CFLAGS
+ld -r -o $CACHEDIR/patch.o $CACHEDIR/diff_objs/*.o
+ld -r -o $CACHEDIR/$PATCHNAME-patch.o $CACHEDIR/patch-hook.o $CACHEDIR/patch.o \
+         -T $HOOKDIR/patch-secinfo.lds
+
+echo "created patch: $CACHEDIR/$PATCHNAME-patch.o"
+
+cp $CACHEDIR/$PATCHNAME-patch.o ./
+
+echo "cleanup..."
+
+cd $SHEEPDIR &> /dev/null
+make clean &> /dev/null
+make &> /dev/null
+cd - &> /dev/null
+
+echo "NOTE: patch stuff is cached @ $HOME/.livepatch"
+
+echo "Done"
