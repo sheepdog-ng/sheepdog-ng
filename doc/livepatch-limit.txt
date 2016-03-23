@@ -1,0 +1,68 @@
+the limitation of livepatch feature
+===================================
+0. kpatch
+livepatch feature borrows a lot of ideas even codes from kpatch, so livepatch
+handles a subset of conditions that kpatch can handle for now, except for
+tls(thread local storage) support which is rarely seen in kernel code.
+
+NOTE: you could take a look at kpatch's patch-author-guide.md for reference
+
+1. change to data strutures
+  Livepatch handles change to functions, but not to data structures.
+    e.g.
+
+    static struct sd_op_template sd_ops[] = {
+
+    /* NULL operations */
+    [SD_OP_GET_NID] = {
+        .name = "NULL",
+        .type = SD_OP_TYPE_NONE,
+        .force = true,
+        .process_work = null_get_nid,
+    },
+
+    /* cluster operations */
+    [SD_OP_NEW_VDI] = {
+        .name = "NEW_VDI",
+        .type = SD_OP_TYPE_CLUSTER,
+        .is_admin_op = true,
+        .process_work = cluster_new_vdi,
+        .process_main = post_cluster_new_vdi,
+    },
+
+    +[SD_OP_NEW_OP] = {
+    +    ...
+    +},
+
+  the patch above that add a new operations to sheep is not supported.
+
+2. change to "init" functions
+    e.g.
+
+    sheep/request.c
+
+    int init_unix_domain_socket(const char *dir)
+    {
+        static bool is_inet_socket;
+        char unix_path[PATH_MAX];
+
+        snprintf(unix_path, sizeof(unix_path), "%s/sock", dir);
+        unlink(unix_path);
+
+        return create_unix_domain_socket(unix_path, create_listen_port_fn,
+                         &is_inet_socket);
+    }
+
+    the above function is called when sheep startup, so patch it makes no sense
+    since it will never be called again.
+
+3. newly introduced tls variable
+    If you use a new tls variable in a function, livepatch is not able to
+    add it to the tls block area of sheep.
+    e.g.
+
+    nt vdi_create(const struct vdi_iocb *iocb, uint32_t *new_vid)
+    {
+        struct vdi_info info = {};
+        int ret;
+   +    static __thread new_var;
