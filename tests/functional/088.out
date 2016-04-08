@@ -16,9 +16,6 @@ Cluster created at DATE
 
 Epoch Time           Version
 DATE      1 [IP:7000]
-Response's result: Waiting for other nodes to join cluster
-Cannot get information from any nodes
-Id	Size	Used	Avail	Use%
 3. start sheep with my address again
 Cluster status: running, auto-recovery enabled
 

@@ -24,7 +24,6 @@ SHEEP_OPTIONS=$ORIG_SHEEP_OPTIONS
 _start_sheep 0
 _wait_for_sheep 1
 $DOG cluster info | _filter_cluster_info | _filter_ip
-$DOG node info
 $DOG cluster shutdown
 _wait_for_sheep_stop
 
