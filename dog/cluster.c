@@ -273,7 +273,8 @@ retry:
 	if (ret)
 		goto error;
 	dummy.nid = mynid;
-	if (!rb_search(&sd_nroot, &dummy, rb, node_cmp)) {
+	if (logs->flags & SD_CLUSTER_FLAG_MANUAL &&
+	    !rb_search(&sd_nroot, &dummy, rb, node_cmp)) {
 		printf("%s not yet join the cluster. You may try 'dog cluster"
 		       " reconfig' to manually add it.\n",
 		       addr_to_str(mynid.addr, mynid.port));
