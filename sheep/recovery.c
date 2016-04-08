@@ -134,6 +134,11 @@ static bool invalid_node(const struct sd_node *n, struct vnode_info *info)
 
 	if (rb_search(&info->nroot, n, rb, node_cmp))
 		return false;
+
+	if (sys->cinfo.flags & SD_CLUSTER_FLAG_MANUAL &&
+	    n->nid.status != NODE_STATUS_OFFLINE)
+		return false;
+
 	return true;
 }
 
@@ -286,39 +291,61 @@ static int recover_object_from(struct recovery_obj_work *row,
 	return ret;
 }
 
+static void get_targeted_nodes(uint64_t oid, struct rb_root *vroot,
+			       int nr_copies, const struct sd_node *ret_nodes[])
+{
+	const struct sd_node *target_nodes[SD_MAX_COPIES];
+	int i, j = 0;
+
+	oid_to_nodes(oid, vroot, nr_copies, target_nodes);
+
+	if (sys->cinfo.flags & SD_CLUSTER_FLAG_MANUAL) {
+		for (i = 0; i < nr_copies; i++) {
+			if (target_nodes[i]->nid.status == NODE_STATUS_RUNNING)
+				ret_nodes[j++] = target_nodes[i];
+		}
+		for (i = 0; i < nr_copies; i++) {
+			if (target_nodes[i]->nid.status == NODE_STATUS_RECOVER)
+				ret_nodes[j++] = target_nodes[i];
+		}
+		for (i = 0; i < nr_copies; i++) {
+			if (target_nodes[i]->nid.status == NODE_STATUS_OFFLINE)
+				ret_nodes[j++] = target_nodes[i];
+		}
+		return;
+	}
+
+	/* Put local node firstly to try to recover from local */
+	for (i = 0; i < nr_copies; i++) {
+		const struct sd_node *node = target_nodes[i];
+
+		if (node_is_local(node) && i != 0) {
+			const struct sd_node *t = ret_nodes[0];
+
+			ret_nodes[0] = node;
+			ret_nodes[j++] = t;
+			continue;
+		}
+		ret_nodes[j++] = node;
+	}
+}
+
 static int recover_object_from_replica(struct recovery_obj_work *row,
 				       struct vnode_info *old,
 				       uint32_t tgt_epoch)
 {
 	uint64_t oid = row->oid;
 	uint32_t epoch = row->base.epoch;
-	int nr_copies, ret = SD_RES_SUCCESS, start = 0;
+	int nr_copies, ret = SD_RES_SUCCESS;
 	bool fully_replicated = true;
+	const struct sd_node *nodes[SD_MAX_COPIES];
 
 	nr_copies = get_obj_copy_number(oid, old->nr_zones);
-
-	/* find local node first to try to recover from local */
-	for (int i = 0; i < nr_copies; i++) {
-		const struct sd_vnode *vnode;
-
-		vnode = oid_to_vnode(oid, &old->vroot, i);
-
-		if (vnode_is_local(vnode)) {
-			start = i;
-			break;
-		}
-	}
-
-	/* For manual recovery, we recover locally in the last */
-	if (sys->cinfo.flags & SD_CLUSTER_FLAG_MANUAL)
-		start = (start + 1) % nr_copies;
+	get_targeted_nodes(oid, &old->vroot, nr_copies, nodes);
 
 	/* Let's do a breadth-first search */
 	for (int i = 0; i < nr_copies; i++) {
-		const struct sd_node *node;
-		int idx = (i + start) % nr_copies;
-
-		node = oid_to_node(oid, &old->vroot, idx);
+		const struct sd_node *node = nodes[i];
 
 		if (invalid_node(node, row->base.cur_vinfo))
 			continue;
@@ -1040,6 +1067,10 @@ again:
 			sd_debug("go to the next recovery");
 			goto out;
 		}
+
+		if (sys->cinfo.flags & SD_CLUSTER_FLAG_MANUAL &&
+		    node->nid.status == NODE_STATUS_OFFLINE)
+			continue;
 
 		oids = fetch_object_list(node, rw->epoch, &nr_oids);
 		if (!oids)
