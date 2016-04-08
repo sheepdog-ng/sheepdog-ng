@@ -481,7 +481,7 @@ static int gateway_forward_request(struct request *req)
 	uint64_t oid = req->rq.obj.oid;
 	struct forward_info fi;
 	struct sd_req hdr;
-	const struct sd_node *target_nodes[SD_MAX_NODES];
+	const struct sd_node *target_nodes[SD_MAX_COPIES];
 	int nr_copies = get_req_copy_number(req), nr_reqs, nr_to_send = 0;
 	struct req_iter *reqs = NULL;
 
