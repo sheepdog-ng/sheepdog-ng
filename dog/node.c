@@ -17,6 +17,7 @@ static struct node_cmd_data {
 	bool watch;
 	bool local;
 	bool force;
+	bool io_addr;
 } node_cmd_data;
 
 static void cal_total_vdi_size(uint32_t vid, const char *name, const char *tag,
@@ -49,7 +50,9 @@ static int node_list(int argc, char **argv)
 		}
 
 		printf(raw_output ? "%d %s %d %u\n" : "%4d   %-20s\t%2d%11u\n",
-		       i++, addr_to_str(n->nid.addr, n->nid.port),
+		       i++, node_cmd_data.io_addr ?
+			    addr_to_str(n->nid.io_addr, n->nid.io_port) :
+			    addr_to_str(n->nid.addr, n->nid.port),
 		       n->nr_vnodes, n->zone);
 	}
 
@@ -59,6 +62,9 @@ static int node_list(int argc, char **argv)
 		printf("\nRecover: [");
 		rb_for_each_entry(node, &rroot, rb) {
 			printf("%s, ",
+			       node_cmd_data.io_addr ?
+			       addr_to_str(node->nid.io_addr,
+					   node->nid.io_port) :
 			       addr_to_str(node->nid.addr, node->nid.port));
 		}
 		printf("\b\b]\n");
@@ -70,6 +76,9 @@ static int node_list(int argc, char **argv)
 		printf("\nOffline: [");
 		rb_for_each_entry(node, &oroot, rb) {
 			printf("%s, ",
+			       node_cmd_data.io_addr ?
+			       addr_to_str(node->nid.io_addr,
+					   node->nid.io_port) :
 			       addr_to_str(node->nid.addr, node->nid.port));
 		}
 		printf("\b\b]\n");
@@ -619,6 +628,9 @@ static int node_parser(int ch, const char *opt)
 	case 'f':
 		node_cmd_data.force = true;
 		break;
+	case 'i':
+		node_cmd_data.io_addr = true;
+		break;
 	}
 
 	return 0;
@@ -630,6 +642,7 @@ static struct sd_option node_options[] = {
 	{'w', "watch", false, "watch the stat every second"},
 	{'l', "local", false, "issue request to local node"},
 	{'f', "force", false, "ignore the confirmation"},
+	{'i', "io", false, "show data io address"},
 	{ 0, NULL, false, NULL },
 };
 
@@ -723,8 +736,8 @@ static int node_log(int argc, char **argv)
 static struct subcommand node_cmd[] = {
 	{"kill", "<node id>", "aprhlT", "kill node", NULL,
 	 CMD_NEED_NODELIST, node_kill, node_options},
-	{"list", NULL, "aprhT", "list nodes", NULL,
-	 CMD_NEED_NODELIST, node_list},
+	{"list", NULL, "aprhiT", "list nodes", NULL,
+	 CMD_NEED_NODELIST, node_list, node_options},
 	{"info", NULL, "aprhT", "show information about each node", NULL,
 	 CMD_NEED_NODELIST, node_info},
 	{"recovery", NULL, "aphPrT", "show recovery information of nodes", NULL,
