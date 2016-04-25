@@ -388,7 +388,7 @@ int prepare_iocb(uint64_t oid, const struct siocb *iocb, bool create);
 int err_to_sderr(const char *path, uint64_t oid, int err);
 
 int update_epoch_log(uint32_t epoch, struct sd_node *nodes,
-		      size_t nr_nodes, bool force_create);
+		      size_t nr_nodes, time_t timestamp, bool force_create);
 int inc_and_log_epoch(void);
 
 extern char *config_path;

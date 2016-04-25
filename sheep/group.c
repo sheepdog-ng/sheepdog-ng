@@ -385,7 +385,8 @@ int epoch_log_read_remote(uint32_t epoch, struct sd_node *nodes, int len,
 
 		*nr_nodes = nodes_len / sizeof(struct sd_node);
 		/* epoch file is missing in local node, try to create one */
-		update_epoch_log(epoch, nodes, *nr_nodes, false);
+		update_epoch_log(epoch, nodes, *nr_nodes, *(time_t *)(buf + nodes_len),
+                         false);
 		return SD_RES_SUCCESS;
 	}
 
@@ -552,7 +553,7 @@ int inc_and_log_epoch(void)
 	uatomic_inc(&sys->cinfo.epoch);
 
 	return update_epoch_log(sys->cinfo.epoch, sys->cinfo.nodes,
-				sys->cinfo.nr_nodes, true);
+				sys->cinfo.nr_nodes, 0, true);
 }
 
 static struct vnode_info *alloc_old_vnode_info(void)
@@ -691,7 +692,7 @@ static void manual_update_cluster_info(const struct sd_node *joined)
 
 		rb_destroy(&nroot, struct sd_node, rb);
 		update_epoch_log(sys->cinfo.epoch, sys->cinfo.nodes,
-				 sys->cinfo.nr_nodes, false);
+				 sys->cinfo.nr_nodes, 0, false);
 	} else {
 		struct vnode_info *cur_vinfo = get_vnode_info();
 		struct sd_node *n = rb_search(&cur_vinfo->nroot,

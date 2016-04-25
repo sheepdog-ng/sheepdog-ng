@@ -82,7 +82,7 @@ int err_to_sderr(const char *path, uint64_t oid, int err)
 }
 
 int update_epoch_log(uint32_t epoch, struct sd_node *nodes,
-		      size_t nr_nodes, bool force_create)
+		      size_t nr_nodes, time_t timestamp, bool force_create)
 {
 	int ret, len, nodes_len;
 	time_t t;
@@ -91,7 +91,10 @@ int update_epoch_log(uint32_t epoch, struct sd_node *nodes,
 	sd_debug("update epoch: %d, %zu", epoch, nr_nodes);
 
 	/* Piggyback the epoch creation time for 'dog cluster info' */
-	time(&t);
+    if (!timestamp)
+        time(&t);
+    else
+        t = timestamp;
 	nodes_len = nr_nodes * sizeof(struct sd_node);
 	len = nodes_len + sizeof(time_t);
 	buf = xmalloc(len);
