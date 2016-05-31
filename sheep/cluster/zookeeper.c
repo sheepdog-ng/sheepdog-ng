@@ -784,7 +784,9 @@ static void zk_watcher(zhandle_t *zh, int type, int state, const char *path,
 			n->gone = true;
 		sd_rw_unlock(&zk_tree_lock);
 		if (n)
-			add_event(EVENT_LEAVE, &znode, NULL, 0);
+			if (add_event(EVENT_LEAVE, &znode, NULL, 0)
+			    != SD_RES_SUCCESS)
+			panic("Failed to add LEAVE event");
 	}
 }
 
@@ -1044,7 +1046,8 @@ static int zk_leave(void)
 
 	snprintf(path, sizeof(path), MEMBER_ZNODE"/%s",
 		 node_to_str(&this_node.node));
-	add_event(EVENT_LEAVE, &this_node, NULL, 0);
+	if (add_event(EVENT_LEAVE, &this_node, NULL, 0) != SD_RES_SUCCESS)
+		panic("Failed to add LEAVE event");
 	lock_table_remove_znodes();
 	zk_delete_node(path, -1);
 	return 0;
