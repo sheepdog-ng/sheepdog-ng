@@ -704,7 +704,7 @@ static int add_event(enum zk_event_type type, struct zk_node *znode, void *buf,
  * Type value:
  * -1 SESSION_EVENT, use State to indicate what kind of sub-event
  *   State value:
- *   -122 SESSION EXPIRED
+ *   -112 SESSION EXPIRED
  *   1    CONNECTING
  *   3    CONNECTED
  * 1  CREATED_EVENT
