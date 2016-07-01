@@ -1069,7 +1069,17 @@ static void zk_handle_join(struct zk_event *ev)
 {
 	sd_debug("sender: %s", node_to_str(&ev->sender.node));
 	if (!uatomic_is_true(&is_master)) {
-		/* Let's await master acking the join-request */
+		/*
+		 * Let's await master acking the join-request
+		 *
+		 * zk_queue_peek(next) will peek the 'join' event and
+		 * will be busy popping out zk_handle_join() to wait for the
+		 * master node to rewrite 'join' event as 'accept' event.
+		 * We have to do busy waiting because the master might die
+		 * before pushing 'acccept' event. Someone else should take the
+		 * role over the dead to ack the join-request.
+		 */
+		usleep(200000); /* Reduce reads from zk */
 		queue_pos--;
 		return;
 	}
