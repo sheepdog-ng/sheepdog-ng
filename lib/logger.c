@@ -23,12 +23,10 @@
 #include <errno.h>
 #include <time.h>
 #include <sys/shm.h>
-#include <sys/ipc.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/prctl.h>
-#include <sys/sem.h>
 #include <pthread.h>
 #include <libgen.h>
 #include <sys/time.h>
@@ -417,8 +415,8 @@ static void dolog(int prio, const char *func, int line,
 		ops.sem_num = 0;
 		ops.sem_flg = SEM_UNDO;
 		ops.sem_op = -1;
-		if (semop(la->semid, &ops, 1) < 0) {
-			syslog(LOG_ERR, "semop up failed: %m");
+		if (xsemop(la->semid, &ops, 1) < 0) {
+			syslog(LOG_ERR, "xsemop up failed: %m");
 			return;
 		}
 
@@ -436,8 +434,8 @@ static void dolog(int prio, const char *func, int line,
 		}
 
 		ops.sem_op = 1;
-		if (semop(la->semid, &ops, 1) < 0) {
-			syslog(LOG_ERR, "semop down failed: %m");
+		if (xsemop(la->semid, &ops, 1) < 0) {
+			syslog(LOG_ERR, "xsemop down failed: %m");
 			return;
 		}
 	} else {
@@ -505,8 +503,8 @@ static void log_flush(void)
 	ops.sem_num = 0;
 	ops.sem_flg = SEM_UNDO;
 	ops.sem_op = -1;
-	if (semop(la->semid, &ops, 1) < 0) {
-		syslog(LOG_ERR, "semop up failed: %m");
+	if (xsemop(la->semid, &ops, 1) < 0) {
+		syslog(LOG_ERR, "xsemop up failed: %m");
 		exit(1);
 	}
 
@@ -516,8 +514,8 @@ static void log_flush(void)
 	la->tail = la->start;
 
 	ops.sem_op = 1;
-	if (semop(la->semid, &ops, 1) < 0) {
-		syslog(LOG_ERR, "semop down failed: %m");
+	if (xsemop(la->semid, &ops, 1) < 0) {
+		syslog(LOG_ERR, "xsemop down failed: %m");
 		exit(1);
 	}
 

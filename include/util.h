@@ -14,6 +14,8 @@
 #include <errno.h>
 #include <sys/param.h>
 #include <assert.h>
+#include <sys/ipc.h>
+#include <sys/sem.h>
 
 #include "list.h"
 
@@ -575,4 +577,6 @@ static inline uint64_t clock_get_time(void)
 }
 
 char *xstrdup(const char *s);
+int xsemop(int semid, struct sembuf *sops, unsigned nsops);
+
 #endif

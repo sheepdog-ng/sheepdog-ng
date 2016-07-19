@@ -22,7 +22,6 @@
 #include <sys/eventfd.h>
 #include <sys/syscall.h>
 
-
 #include "util.h"
 
 mode_t sd_def_dmode = S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP;
@@ -625,3 +624,13 @@ char *xstrdup(const char *s)
 	return ret;
 }
 
+int xsemop(int semid, struct sembuf *sops, unsigned nsops)
+{
+	int ret;
+
+	do {
+		ret = semop(semid, sops, nsops);
+	} while (unlikely(ret < 0) && errno == EINTR);
+
+	return ret;
+}
