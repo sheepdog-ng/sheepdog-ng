@@ -196,7 +196,7 @@ static inline ZOOAPI int zk_delete_node(const char *path, int version)
 	int rc;
 	do {
 		rc = zoo_delete(zhandle, path, version);
-	} while (rc == ZOPERATIONTIMEOUT);
+	} while (rc == ZOPERATIONTIMEOUT || rc == ZCONNECTIONLOSS);
 	CHECK_ZK_RC(rc, path);
 
 	return rc;
@@ -209,7 +209,7 @@ zk_init_node(const char *path)
 	do {
 		rc = zoo_create(zhandle, path, "", 0, &ZOO_OPEN_ACL_UNSAFE, 0,
 				NULL, 0);
-	} while (rc == ZOPERATIONTIMEOUT);
+	} while (rc == ZOPERATIONTIMEOUT || rc == ZCONNECTIONLOSS);
 	CHECK_ZK_RC(rc, path);
 
 	if (rc == ZNODEEXISTS)
@@ -226,7 +226,7 @@ zk_create_node(const char *path, const char *value, int valuelen,
 	do {
 		rc = zoo_create(zhandle, path, value, valuelen, acl,
 				flags, path_buffer, path_buffer_len);
-	} while (rc == ZOPERATIONTIMEOUT);
+	} while (rc == ZOPERATIONTIMEOUT || rc == ZCONNECTIONLOSS);
 	CHECK_ZK_RC(rc, path);
 
 	return rc;
@@ -261,7 +261,7 @@ static inline ZOOAPI int zk_get_data(const char *path, void *buffer,
 	do {
 		rc = zoo_get(zhandle, path, 1, (char *)buffer,
 			     buffer_len, NULL);
-	} while (rc == ZOPERATIONTIMEOUT);
+	} while (rc == ZOPERATIONTIMEOUT || rc == ZCONNECTIONLOSS);
 	CHECK_ZK_RC(rc, path);
 
 	return rc;
@@ -273,7 +273,7 @@ zk_set_data(const char *path, const char *buffer, int buflen, int version)
 	int rc;
 	do {
 		rc = zoo_set(zhandle, path, buffer, buflen, version);
-	} while (rc == ZOPERATIONTIMEOUT);
+	} while (rc == ZOPERATIONTIMEOUT || rc == ZCONNECTIONLOSS);
 	CHECK_ZK_RC(rc, path);
 
 	return rc;
@@ -284,7 +284,7 @@ static inline ZOOAPI int zk_node_exists(const char *path)
 	int rc;
 	do {
 		rc = zoo_exists(zhandle, path, 1, NULL);
-	} while (rc == ZOPERATIONTIMEOUT);
+	} while (rc == ZOPERATIONTIMEOUT || rc == ZCONNECTIONLOSS);
 	CHECK_ZK_RC(rc, path);
 
 	return rc;
@@ -296,7 +296,7 @@ static inline ZOOAPI int zk_get_children(const char *path,
 	int rc;
 	do {
 		rc = zoo_get_children(zhandle, path, 1, strings);
-	} while (rc == ZOPERATIONTIMEOUT);
+	} while (rc == ZOPERATIONTIMEOUT || rc == ZCONNECTIONLOSS);
 	CHECK_ZK_RC(rc, path);
 
 	return rc;
@@ -961,7 +961,7 @@ static void zk_compete_master(void)
 						MAX_NODE_STR_LEN,
 						my_compete_path,
 						MAX_NODE_STR_LEN, true);
-		} while (rc == ZOPERATIONTIMEOUT);
+		} while (rc == ZOPERATIONTIMEOUT || rc == ZCONNECTIONLOSS);
 		CHECK_ZK_RC(rc, MASTER_ZNODE "/");
 		if (rc != ZOK)
 			goto out_unlock;
