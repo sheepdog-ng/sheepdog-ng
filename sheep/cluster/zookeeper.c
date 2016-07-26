@@ -36,6 +36,7 @@
 
 static int zk_timeout = SESSION_TIMEOUT;
 static int my_master_seq;
+static char zk_hosts[MAX_NODE_STR_LEN];
 
 /* structure for distributed lock */
 struct cluster_lock {
@@ -1488,7 +1489,6 @@ static int zk_init(const char *option)
 {
 	char *hosts, *to, *p;
 	int ret, timeo;
-	char conn[MAX_NODE_STR_LEN];
 
 	if (!option) {
 		sd_err("You must specify zookeeper servers.");
@@ -1504,17 +1504,17 @@ static int zk_init(const char *option)
 		p = strstr(hosts, "timeout");
 		*--p = '\0';
 	}
-	pstrcpy(conn, MAX_NODE_STR_LEN, hosts);
-	if (!strchr(conn, '/'))
-		strcat(conn, DEFAULT_BASE);
-	if (zk_prepare_root(conn) != 0) {
-		sd_err("failed to initialize zk server %s", conn);
+	pstrcpy(zk_hosts, MAX_NODE_STR_LEN, hosts);
+	if (!strchr(zk_hosts, '/'))
+		strcat(zk_hosts, DEFAULT_BASE);
+	if (zk_prepare_root(zk_hosts) != 0) {
+		sd_err("failed to initialize zk server %s", zk_hosts);
 		return -1;
 	}
 
 	sd_info("version %d.%d.%d, address %s, timeout %d", ZOO_MAJOR_VERSION,
-		ZOO_MINOR_VERSION, ZOO_PATCH_VERSION, conn, zk_timeout);
-	if (zk_connect(conn, zk_watcher, zk_timeout) < 0)
+		ZOO_MINOR_VERSION, ZOO_PATCH_VERSION, zk_hosts, zk_timeout);
+	if (zk_connect(zk_hosts, zk_watcher, zk_timeout) < 0)
 		return -1;
 
 	timeo = zoo_recv_timeout(zhandle);
