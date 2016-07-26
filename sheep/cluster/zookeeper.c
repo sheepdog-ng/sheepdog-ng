@@ -1434,11 +1434,12 @@ static void zk_unlock(uint64_t lock_id)
 	sd_debug("unlock %"PRIu64, lock_id);
 }
 
-static int zk_connect(const char *host, watcher_fn watcher, int timeout)
+static int zk_connect(const char *host, watcher_fn watcher, int timeout,
+		      clientid_t *sid)
 {
 	int interval, max_retry, retry;
 
-	zhandle = zookeeper_init(host, watcher, timeout, NULL, NULL, 0);
+	zhandle = zookeeper_init(host, watcher, timeout, sid, NULL, 0);
 
 	if (!zhandle) {
 		sd_err("failed to initialize zk server %s", host);
@@ -1474,7 +1475,7 @@ static int zk_prepare_root(const char *hosts)
 	}
 	conn[i] = '\0';
 
-	if (zk_connect(conn, zk_watcher, zk_timeout) < 0)
+	if (zk_connect(conn, zk_watcher, zk_timeout, NULL) < 0)
 		return -1;
 
 	sd_debug("sheepdog cluster_id %s", root);
@@ -1514,7 +1515,7 @@ static int zk_init(const char *option)
 
 	sd_info("version %d.%d.%d, address %s, timeout %d", ZOO_MAJOR_VERSION,
 		ZOO_MINOR_VERSION, ZOO_PATCH_VERSION, zk_hosts, zk_timeout);
-	if (zk_connect(zk_hosts, zk_watcher, zk_timeout) < 0)
+	if (zk_connect(zk_hosts, zk_watcher, zk_timeout, NULL) < 0)
 		return -1;
 
 	timeo = zoo_recv_timeout(zhandle);
