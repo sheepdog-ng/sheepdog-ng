@@ -219,7 +219,7 @@ static int post_cluster_del_vdi(const struct sd_req *req, struct sd_rsp *rsp,
 	int ret = rsp->result;
 	char *name = data;
 
-	sd_info("name: %s, base_vdi_id: %x, new vdi_id: %x, sender: %s",
+	sd_info("name: %s, base_vdi_id: %x, del vdi_id: %x, sender: %s",
 		name, req->vdi.base_vdi_id, rsp->vdi.vdi_id,
 		node_to_str(sender));
 
