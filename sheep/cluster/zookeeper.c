@@ -1002,6 +1002,122 @@ out_unlock:
 	sd_rw_unlock(&zk_compete_master_lock);
 }
 
+static int zk_connect(const char *host, watcher_fn watcher, int timeout,
+		      clientid_t *sid)
+{
+	int interval, max_retry, retry;
+
+	zhandle = zookeeper_init(host, watcher, timeout, sid, NULL, 0);
+
+	if (!zhandle) {
+		sd_err("failed to initialize zk server %s", host);
+		return -1;
+	}
+
+	interval = 100;
+	retry = 0;
+	max_retry = timeout / interval;
+	while (zoo_state(zhandle) != ZOO_CONNECTED_STATE) {
+		usleep(interval * 1000);
+		if (++retry >= max_retry) {
+			sd_err("failed to connect to zk server %s "
+					"after %d retries", host, retry);
+			return -1;
+		}
+	}
+	return 0;
+}
+
+/*XXX: Check block event */
+static void recover_zk_states(void)
+{
+	struct String_vector strs;
+	char path[MAX_NODE_STR_LEN];
+	clientid_t sid;
+	zhandle_t *tmp_handle = zhandle;
+	int len = sizeof(clientid_t), rc;
+
+	/* Recover the old session at first */
+	snprintf(path, sizeof(path), MEMBER_ZNODE "/%s",
+		 node_to_str(&this_node.node));
+	rc = zoo_get(tmp_handle, path, 0, (char *)&sid, &len, NULL);
+	switch (rc) {
+	case ZOK:
+		break;
+	case ZNONODE:
+		sd_err("No node %s, exiting...", path);
+		exit(1);
+	default:
+		sd_err("Failed to get data for %s, %s, exiting", path,
+		       zerror(rc));
+		exit(1);
+	}
+	zookeeper_close(tmp_handle);
+	if (zk_connect(zk_hosts, zk_watcher, zk_timeout, &sid) < 0)
+		exit(1);
+
+	/* Now we've recovered the session, then set watchers and nodes */
+	RETURN_VOID_IF_ERROR(zk_get_children(MEMBER_ZNODE, &strs), "");
+	FOR_EACH_ZNODE(MEMBER_ZNODE, path, &strs) {
+		struct sd_node n;
+		struct zk_node zk;
+
+		RETURN_VOID_IF_ERROR(zk_node_exists(path), "");
+		str_to_node(path, &n);
+		mempcpy(&zk.node, &n, sizeof(struct sd_node));
+		zk_tree_add(&zk); /* current sd_nodes just have ip:port */
+	}
+}
+
+static void recover_sheep_states(void)
+{
+	struct sd_req hdr;
+	struct cluster_info cinfo;
+	struct sd_node *n;
+	struct zk_node *zk;
+	int ret = SD_RES_CLUSTER_ERROR;
+
+	rb_for_each_entry(n, &sd_node_root, rb) {
+		if (node_eq(&this_node.node, n))
+			continue;
+		sd_init_req(&hdr, SD_OP_CLUSTER_INFO);
+		hdr.data_length = sizeof(cinfo);
+		ret = sheep_exec_req(&n->nid, &hdr, &cinfo);
+		if (ret == SD_RES_SUCCESS)
+			break;
+	}
+	if (ret != SD_RES_SUCCESS) {
+		sd_err("We can't get cluster state from the cluster, %s. Please"
+		       " check the network and the cluster. Exiting...",
+		       sd_strerror(ret));
+		exit(1);
+	}
+
+	/* Update nodes from sys->cinfo */
+	rb_for_each_entry(zk, &zk_node_root, rb) {
+		for (int i = 0; i < cinfo.nr_nodes; i++) {
+			if (node_eq(&zk->node, &cinfo.nodes[i])) {
+				zk->node = cinfo.nodes[i];
+				sd_debug("%s", node_to_str(&zk->node));
+			}
+		}
+	}
+
+	joined = true;
+	set_cluster_shutdown(true); /* Fake the node state to avoid recovery */
+	build_node_list();
+	sd_accept_handler(&this_node.node, &sd_node_root, nr_sd_nodes,
+			  &cinfo);
+}
+
+static int direct_join(void)
+{
+	recover_zk_states();
+	recover_sheep_states();
+
+	return ZOK;
+}
+
 static int zk_join(const struct sd_node *myself,
 		   void *opaque, size_t opaque_len)
 {
@@ -1014,13 +1130,16 @@ static int zk_join(const struct sd_node *myself,
 	rc1 = zk_node_exists(path);
 
 	snprintf(path, sizeof(path), QUEUE_POS_ZNODE "/%s",
-		node_to_str(myself));
+		 node_to_str(myself));
 	rc2 = zk_node_exists(path);
 
 	if (rc1 == ZOK || rc2 == ZOK) {
+		if (sys->upgrade)
+			return direct_join();
 		sd_err("Previous zookeeper session exist, shoot myself. Please "
-			"wait for %d seconds to join me again.",
-			DIV_ROUND_UP(zk_timeout, 1000));
+		       "wait for %d seconds to join me again. Or you can "
+		       "specify --upgrade to make rolling update.",
+		       DIV_ROUND_UP(zk_timeout, 1000));
 		exit(1);
 	}
 
@@ -1039,7 +1158,7 @@ static int zk_leave(void)
 
 	if (uatomic_is_true(&is_master)) {
 		snprintf(path, sizeof(path), MASTER_ZNODE "/%010"PRId32,
-				my_master_seq);
+			 my_master_seq);
 		zk_delete_node(path, -1);
 	}
 
@@ -1432,32 +1551,6 @@ static void zk_unlock(uint64_t lock_id)
 {
 	lock_table_lookup_release(lock_id);
 	sd_debug("unlock %"PRIu64, lock_id);
-}
-
-static int zk_connect(const char *host, watcher_fn watcher, int timeout,
-		      clientid_t *sid)
-{
-	int interval, max_retry, retry;
-
-	zhandle = zookeeper_init(host, watcher, timeout, sid, NULL, 0);
-
-	if (!zhandle) {
-		sd_err("failed to initialize zk server %s", host);
-		return -1;
-	}
-
-	interval = 100;
-	retry = 0;
-	max_retry = timeout / interval;
-	while (zoo_state(zhandle) != ZOO_CONNECTED_STATE) {
-		usleep(interval * 1000);
-		if (++retry >= max_retry) {
-			sd_err("failed to connect to zk server %s "
-					"after %d retries", host, retry);
-			return -1;
-		}
-	}
-	return 0;
 }
 
 static int zk_prepare_root(const char *hosts)

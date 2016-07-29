@@ -839,12 +839,6 @@ int main(int argc, char **argv)
 	if (ret)
 		goto cleanup_log;
 
-	ret = create_cluster(port, zone, nr_vnodes, explicit_addr);
-	if (ret) {
-		sd_err("failed to create sheepdog cluster");
-		goto cleanup_log;
-	}
-
 	/* We should init trace for work queue before journal init */
 	ret = wq_trace_init();
 	if (ret) {
@@ -863,15 +857,15 @@ int main(int argc, char **argv)
 	 */
 	ret = create_work_queues();
 	if (ret)
-		goto cleanup_cluster;
+		goto cleanup_log;
 
 	ret = sockfd_init();
 	if (ret)
-		goto cleanup_cluster;
+		goto cleanup_log;
 
 	ret = init_store_driver(sys->gateway_only);
 	if (ret)
-		goto cleanup_cluster;
+		goto cleanup_log;
 
 	if (sys->enable_object_cache) {
 		if (!strlen(ocpath))
@@ -879,27 +873,27 @@ int main(int argc, char **argv)
 			memcpy(ocpath, dir, strlen(dir));
 		ret = object_cache_init(ocpath);
 		if (ret)
-			goto cleanup_cluster;
+			goto cleanup_log;
 	}
 
 	ret = trace_init();
 	if (ret)
-		goto cleanup_cluster;
+		goto cleanup_log;
 
 	ret = livepatch_init(dir);
 	if (ret)
-		goto cleanup_cluster;
+		goto cleanup_log;
 
 	if (http_options && http_init(http_options) != 0)
-		goto cleanup_cluster;
+		goto cleanup_log;
 
 	ret = nfs_init(NULL);
 	if (ret)
-		goto cleanup_cluster;
+		goto cleanup_log;
 
 	if (pid_file && (create_pidfile(pid_file) != 0)) {
 		sd_err("failed to pid file '%s' - %m", pid_file);
-		goto cleanup_cluster;
+		goto cleanup_log;
 	}
 
 	if (chdir(dir) < 0) {
@@ -908,6 +902,13 @@ int main(int argc, char **argv)
 	}
 
 	check_host_env();
+
+	ret = create_cluster(port, zone, nr_vnodes, explicit_addr);
+	if (ret) {
+		sd_err("failed to create sheepdog cluster");
+		goto cleanup_pid_file;
+	}
+
 	sd_info("sheepdog daemon (version %s) started", PACKAGE_VERSION);
 
 	while (sys->nr_outstanding_reqs != 0 ||
@@ -918,13 +919,11 @@ int main(int argc, char **argv)
 	rc = 0;
 	sd_info("shutdown");
 
+	leave_cluster();
+
 cleanup_pid_file:
 	if (pid_file)
 		unlink(pid_file);
-
-cleanup_cluster:
-	leave_cluster();
-
 cleanup_log:
 	log_close();
 

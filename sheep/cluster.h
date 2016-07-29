@@ -20,6 +20,7 @@
 #include <memory.h>
 
 #include "sheepdog_proto.h"
+#include "sheep_priv.h"
 #include "sheep.h"
 #include "config.h"
 #include "common.h"
