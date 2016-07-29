@@ -51,6 +51,8 @@ struct cluster_driver {
 	 */
 	int (*get_local_addr)(uint8_t *myaddr);
 
+	uint8_t (*block_event_number)(void);
+
 	/*
 	 * Join the cluster
 	 *

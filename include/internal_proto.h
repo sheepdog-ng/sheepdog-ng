@@ -250,7 +250,8 @@ struct cluster_info {
 	uint8_t copy_policy;
 	enum sd_status status : 8;
 	enum sd_status last_status : 8;
-	uint8_t __pad[3];
+	bool have_block_event;
+	uint8_t __pad[2];
 	uint8_t store[STORE_LEN];
 
 	/* Node list at cluster_info->epoch */
@@ -262,7 +263,7 @@ struct epoch_log {
 	uint64_t time;		/* treated as time_t */
 	uint32_t epoch;
 	uint32_t nr_nodes;
-	uint8_t  pad;
+	uint8_t  block_event_number;
 	uint8_t  nr_copies;
 	uint8_t  copy_policy;
 	uint8_t  __pad[3];

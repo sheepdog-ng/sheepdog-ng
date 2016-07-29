@@ -486,6 +486,9 @@ static int local_stat_cluster(struct request *req)
 			elog->nr_copies = sys->cinfo.nr_copies;
 			elog->copy_policy = sys->cinfo.copy_policy;
 			elog->flags = sys->cinfo.flags;
+			if (sys->cdrv->block_event_number)
+				elog->block_event_number =
+					sys->cdrv->block_event_number();
 			pstrcpy(elog->drv_name, STORE_LEN,
 				(char *)sys->cinfo.store);
 		}
@@ -1125,6 +1128,8 @@ static int local_oids_exist(const struct sd_req *req, struct sd_rsp *rsp,
 static int local_cluster_info(const struct sd_req *req, struct sd_rsp *rsp,
 			      void *data, const struct sd_node *sender)
 {
+	if (sys->cdrv->block_event_number)
+		sys->cinfo.have_block_event = !!sys->cdrv->block_event_number();
 	memcpy(data, &sys->cinfo, sizeof(sys->cinfo));
 	rsp->data_length = sizeof(sys->cinfo);
 	return SD_RES_SUCCESS;

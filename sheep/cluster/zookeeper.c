@@ -1686,6 +1686,21 @@ static int zk_update_node(struct sd_node *node)
 	return add_event(EVENT_UPDATE_NODE, &znode, NULL, 0);
 }
 
+static uint8_t zk_block_event_number(void)
+{
+	struct list_node *tmp;
+	int num = 0;
+
+	list_for_each(tmp, &zk_block_list) {
+		num++;
+	}
+
+	if (num > UINT8_MAX)
+		num = UINT8_MAX;
+
+	return num;
+}
+
 static struct cluster_driver cdrv_zookeeper = {
 	.name       = "zookeeper",
 
@@ -1699,6 +1714,7 @@ static struct cluster_driver cdrv_zookeeper = {
 	.unlock       = zk_unlock,
 	.update_node  = zk_update_node,
 	.get_local_addr = get_local_addr,
+	.block_event_number = zk_block_event_number,
 };
 
 cdrv_register(cdrv_zookeeper);

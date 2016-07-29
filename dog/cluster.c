@@ -320,6 +320,8 @@ retry:
 			printf("disk");
 		else
 			printf("node");
+
+		printf("\nCluster block event: %d\n", logs->block_event_number);
 	}
 
 	if (!raw_output && rsp->data_length > 0) {
