@@ -223,7 +223,8 @@ static void shm_queue_notify(void)
 
 	for (i = 0; i < nr; i++) {
 		sd_debug("send signal to %s", lnode_to_str(lnodes + i));
-		kill(lnodes[i].pid, SIGUSR1);
+		/* pid == tid for main thread */
+		tgkill(lnodes[i].pid, lnodes[i].pid, SIGUSR1);
 	}
 }
 

@@ -146,6 +146,7 @@ bool is_numeric(const char *p);
 const char *data_to_str(void *data, size_t data_length);
 pid_t gettid(void);
 int tkill(int tid, int sig);
+int tgkill(int tgid, int tid, int sig);
 bool is_xattr_enabled(const char *path);
 const char *my_exe_path(void);
 

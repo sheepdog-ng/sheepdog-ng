@@ -399,9 +399,16 @@ pid_t gettid(void)
 	return syscall(SYS_gettid);
 }
 
+int tgkill(int tgid, int tid, int sig)
+{
+
+	return syscall(SYS_tgkill, tgid, tid, sig);
+}
+
+/* Kill the thread of the tid in current process */
 int tkill(int tid, int sig)
 {
-	return syscall(SYS_tgkill, getpid(), tid, sig);
+	return tgkill(getpid(), tid, sig);
 }
 
 bool is_xattr_enabled(const char *path)
