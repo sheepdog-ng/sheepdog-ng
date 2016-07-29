@@ -1034,8 +1034,11 @@ static void recover_zk_states(void)
 	struct String_vector strs;
 	char path[MAX_NODE_STR_LEN];
 	clientid_t sid;
+	struct Stat stat;
 	zhandle_t *tmp_handle = zhandle;
 	int len = sizeof(clientid_t), rc;
+	char buf[512];
+	int buflen = sizeof(buf);
 
 	/* Recover the old session at first */
 	snprintf(path, sizeof(path), MEMBER_ZNODE "/%s",
@@ -1066,6 +1069,30 @@ static void recover_zk_states(void)
 		str_to_node(path, &n);
 		mempcpy(&zk.node, &n, sizeof(struct sd_node));
 		zk_tree_add(&zk); /* current sd_nodes just have ip:port */
+	}
+
+	/* Set queue position and corresponding watcher */
+	snprintf(path, sizeof(path), QUEUE_ZNODE);
+	rc = zoo_get(zhandle, path, 0, buf, &buflen, &stat);
+	switch (rc) {
+	case ZOK:
+		break;
+	case ZNONODE:
+		sd_err("No node %s, exiting...", path);
+		exit(1);
+	default:
+		sd_err("Failed to get data for %s, %s, exiting", path,
+		       zerror(rc));
+		exit(1);
+	}
+	sd_debug("next queue pos: %d", stat.numChildren);
+	queue_pos = stat.numChildren;
+	first_push = false;
+	snprintf(path, sizeof(path), QUEUE_ZNODE "/%010"PRId32, queue_pos);
+	if (zk_node_exists(path) != ZNONODE) {
+		sd_err("Failed to watch %s, %s, exiting", path,
+		       zerror(rc));
+		exit(1);
 	}
 }
 
