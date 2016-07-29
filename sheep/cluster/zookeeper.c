@@ -1094,6 +1094,9 @@ static void recover_zk_states(void)
 		       zerror(rc));
 		exit(1);
 	}
+
+	/* If the master is roll-updating, we need recover the mastership */
+	zk_compete_master();
 }
 
 static void recover_sheep_states(void)
