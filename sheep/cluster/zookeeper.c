@@ -1028,7 +1028,6 @@ static int zk_connect(const char *host, watcher_fn watcher, int timeout,
 	return 0;
 }
 
-/*XXX: Check block event */
 static void recover_zk_states(void)
 {
 	struct String_vector strs;
@@ -1120,6 +1119,12 @@ static void recover_sheep_states(void)
 		sd_err("We can't get cluster state from the cluster, %s. Please"
 		       " check the network and the cluster. Exiting...",
 		       sd_strerror(ret));
+		exit(1);
+	}
+
+	if (cinfo.have_block_event) {
+		sd_err("There are blocking events unhandled in the cluster, we "
+		       "can't join directly. Exiting...");
 		exit(1);
 	}
 
