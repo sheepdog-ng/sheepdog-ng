@@ -1028,16 +1028,39 @@ static int zk_connect(const char *host, watcher_fn watcher, int timeout,
 	return 0;
 }
 
+static int32_t zk_get_max_queue_seq(void)
+{
+	char path[MAX_NODE_STR_LEN], *p, *tmp;
+	struct String_vector strs;
+	int32_t max_seq, seq;
+	int rc;
+
+	max_seq = INT32_MIN;
+
+	rc = zk_get_children(QUEUE_ZNODE, &strs);
+	if (rc != ZOK) {
+		sd_err("failed to get queue sequence, %s, exiting.",
+		       zerror(rc));
+		exit(1);
+	}
+
+	FOR_EACH_ZNODE(QUEUE_ZNODE, path, &strs) {
+		p = strrchr(path, '/');
+		seq = strtol(++p, &tmp, 10);
+		if (seq > max_seq)
+			max_seq = seq;
+	}
+
+	return max_seq;
+}
+
 static void recover_zk_states(void)
 {
 	struct String_vector strs;
 	char path[MAX_NODE_STR_LEN];
 	clientid_t sid;
-	struct Stat stat;
 	zhandle_t *tmp_handle = zhandle;
 	int len = sizeof(clientid_t), rc;
-	char buf[512];
-	int buflen = sizeof(buf);
 
 	/* Recover the old session at first */
 	snprintf(path, sizeof(path), MEMBER_ZNODE "/%s",
@@ -1071,21 +1094,8 @@ static void recover_zk_states(void)
 	}
 
 	/* Set queue position and corresponding watcher */
-	snprintf(path, sizeof(path), QUEUE_ZNODE);
-	rc = zoo_get(zhandle, path, 0, buf, &buflen, &stat);
-	switch (rc) {
-	case ZOK:
-		break;
-	case ZNONODE:
-		sd_err("No node %s, exiting...", path);
-		exit(1);
-	default:
-		sd_err("Failed to get data for %s, %s, exiting", path,
-		       zerror(rc));
-		exit(1);
-	}
-	sd_debug("next queue pos: %d", stat.numChildren);
-	queue_pos = stat.numChildren;
+	queue_pos = zk_get_max_queue_seq() + 1;
+	sd_debug("next queue pos: %d", queue_pos);
 	first_push = false;
 	snprintf(path, sizeof(path), QUEUE_ZNODE "/%010"PRId32, queue_pos);
 	if (zk_node_exists(path) != ZNONODE) {
