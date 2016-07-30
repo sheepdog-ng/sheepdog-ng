@@ -141,6 +141,38 @@ int default_cleanup(void)
 	return SD_RES_SUCCESS;
 }
 
+static int default_read_from_path(uint64_t oid, const char *path,
+				  const struct siocb *iocb)
+{
+	int flags = prepare_iocb(oid, iocb, false), fd,
+	    ret = SD_RES_SUCCESS;
+	ssize_t size;
+
+	/*
+	 * Make sure oid is in the right place because oid might be misplaced
+	 * in a wrong place, due to 'shutdown/restart with less disks' or any
+	 * bugs. We need call err_to_sderr() to return EIO if disk is broken.
+	 *
+	 * For stale path, get_store_stale_path already does default_exist job.
+	 */
+	if (!is_stale_path(path) && !default_exist(oid, iocb->ec_index))
+		return err_to_sderr(path, oid, ENOENT);
+
+	fd = open(path, flags);
+	if (fd < 0)
+		return err_to_sderr(path, oid, errno);
+
+	size = xpread(fd, iocb->buf, iocb->length, iocb->offset);
+	if (size < 0) {
+		sd_err("failed to read object %"PRIx64", path=%s, offset=%"
+		       PRId32", size=%"PRId32", result=%zd, %m", oid, path,
+		       iocb->offset, iocb->length, size);
+		ret = err_to_sderr(path, oid, errno);
+	}
+	close(fd);
+	return ret;
+}
+
 static int init_vdi_state(uint64_t oid, const char *wd, uint32_t epoch)
 {
 	int ret;
@@ -150,16 +182,20 @@ static int init_vdi_state(uint64_t oid, const char *wd, uint32_t epoch)
 		.buf = inode,
 		.length = SD_INODE_HEADER_SIZE,
 	};
+	char path[PATH_MAX];
 
-	ret = default_read(oid, &iocb);
+	if (epoch == 0)
+		get_store_path(oid, iocb.ec_index, path);
+	else
+		get_store_stale_path(oid, iocb.epoch, iocb.ec_index, path);
+
+	ret = default_read_from_path(oid, path, &iocb);
 	if (ret != SD_RES_SUCCESS) {
 		sd_err("failed to read inode header %" PRIx64 " %" PRId32
-		       "wat %s", oid, epoch, wd);
+		       "at %s", oid, epoch, path);
 		goto out;
 	}
 	atomic_set_bit(oid_to_vid(oid), sys->vdi_inuse);
-
-	ret = SD_RES_SUCCESS;
 out:
 	free(inode);
 	return ret;
@@ -197,38 +233,6 @@ int default_init(void)
 		return ret;
 
 	return for_each_object_in_wd(init_objlist_and_vdi_bitmap, true, NULL);
-}
-
-static int default_read_from_path(uint64_t oid, const char *path,
-				  const struct siocb *iocb)
-{
-	int flags = prepare_iocb(oid, iocb, false), fd,
-	    ret = SD_RES_SUCCESS;
-	ssize_t size;
-
-	/*
-	 * Make sure oid is in the right place because oid might be misplaced
-	 * in a wrong place, due to 'shutdown/restart with less disks' or any
-	 * bugs. We need call err_to_sderr() to return EIO if disk is broken.
-	 *
-	 * For stale path, get_store_stale_path already does default_exist job.
-	 */
-	if (!is_stale_path(path) && !default_exist(oid, iocb->ec_index))
-		return err_to_sderr(path, oid, ENOENT);
-
-	fd = open(path, flags);
-	if (fd < 0)
-		return err_to_sderr(path, oid, errno);
-
-	size = xpread(fd, iocb->buf, iocb->length, iocb->offset);
-	if (size < 0) {
-		sd_err("failed to read object %"PRIx64", path=%s, offset=%"
-		       PRId32", size=%"PRId32", result=%zd, %m", oid, path,
-		       iocb->offset, iocb->length, size);
-		ret = err_to_sderr(path, oid, errno);
-	}
-	close(fd);
-	return ret;
 }
 
 int default_read(uint64_t oid, const struct siocb *iocb)
