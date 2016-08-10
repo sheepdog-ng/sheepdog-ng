@@ -654,7 +654,7 @@ static struct request *alloc_request(struct client_info *ci,
 {
 	struct request *req;
 
-	req = zalloc(sizeof(struct request));
+	req = xzalloc(sizeof(struct request));
 	if (!req)
 		return NULL;
 
@@ -976,7 +976,7 @@ static struct client_info *create_client(int fd)
 	struct sockaddr_storage from;
 	socklen_t namesize = sizeof(from);
 
-	ci = zalloc(sizeof(*ci));
+	ci = xzalloc(sizeof(*ci));
 	if (!ci)
 		return NULL;
 

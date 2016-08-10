@@ -60,7 +60,10 @@ void *xmalloc(size_t size)
 
 void *xzalloc(size_t size)
 {
-	return xcalloc(1, size);
+	void *ret;
+	ret = xmalloc(size);
+	memset(ret, 0, size);
+	return ret;
 }
 
 void *xrealloc(void *ptr, size_t size)
@@ -92,6 +95,7 @@ void *xcalloc(size_t nmemb, size_t size)
 		if (!ret)
 			panic("Out of memory");
 	}
+	memset(ret, 0, nmemb * size);
 	return ret;
 }
 

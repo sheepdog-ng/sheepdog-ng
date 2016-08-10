@@ -101,7 +101,11 @@ static inline int after(uint32_t seq1, uint32_t seq2)
 
 static inline void *zalloc(size_t size)
 {
-	return calloc(1, size);
+	void *ret;
+	ret = malloc(size);
+	if (ret)
+		memset(ret, 0, size);
+	return ret;
 }
 
 /*
