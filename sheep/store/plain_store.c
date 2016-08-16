@@ -449,8 +449,7 @@ int default_remove_object(uint64_t oid, uint8_t ec_index)
 		if (errno == ENOENT)
 			return SD_RES_NO_OBJ;
 
-		sd_err("failed, %s, %m", path);
-		return SD_RES_EIO;
+		return err_to_sderr(path, oid, errno);
 	}
 
 	return SD_RES_SUCCESS;
