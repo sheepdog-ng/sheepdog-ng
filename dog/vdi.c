@@ -1090,6 +1090,7 @@ retry:
 	for (i = nr_logs - 1; i >= 0; i--) {
 		struct rb_root vroot = RB_ROOT;
 		struct rb_root nroot = RB_ROOT;
+		uint32_t store_nodes_nr = 0;
 
 		log = (struct epoch_log *)next_log;
 
@@ -1102,17 +1103,25 @@ retry:
 				data, parity);
 		printf("---------------------------------------------------\n");
 
+		for (int k = 0; k < log->nr_nodes; k++)
+			if (log->nodes[k].nr_vnodes != 0)
+				store_nodes_nr++;
+
 		/*
 		 * When # of nodes is less than nr_copies, we only print
 		 * remaining nodes that holds all the remaining copies.
+		 * Here # of nodes do not include gateway only nodes.
 		 */
-		if (log->nr_nodes < nr_copies) {
+		if (store_nodes_nr < nr_copies) {
 			for (j = 0; j < log->nr_nodes; j++) {
+				if (log->nodes[j].nr_vnodes == 0)
+					continue;
+
 				const struct node_id *n = &log->nodes[j].nid;
 
 				printf("%s\n", addr_to_str(n->addr, n->port));
 			}
-			continue;
+			goto next;
 		}
 		for (int k = 0; k < log->nr_nodes; k++)
 			rb_insert(&nroot, &log->nodes[k], rb, node_cmp);
@@ -1127,6 +1136,7 @@ retry:
 			printf("%s\n", addr_to_str(n->addr, n->port));
 		}
 		rb_destroy(&vroot, struct sd_vnode, rb);
+next:
 		next_log = (char *)log->nodes
 				+ nodes_nr * sizeof(struct sd_node);
 	}
