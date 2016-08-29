@@ -52,6 +52,8 @@ struct recovery_info {
 	uint32_t tgt_epoch;
 	uint64_t done;
 	uint64_t next;
+	/* indicate the next idx of the LAST prio_oids put in oids*/
+	uint64_t last_prio;
 
 	bool notify_complete;
 
@@ -594,6 +596,13 @@ static inline void prepare_schedule_oid(uint64_t oid)
 		return;
 	}
 
+	if (rinfo->last_prio > rinfo->next
+		&& xlfind(&oid, rinfo->oids + rinfo->next,
+			rinfo->last_prio - rinfo->next, oid_cmp)) {
+		sd_debug("%" PRIx64 " has been already scheduled", oid);
+		return;
+	}
+
 	rinfo->nr_prio_oids++;
 	rinfo->prio_oids = xrealloc(rinfo->prio_oids,
 				    rinfo->nr_prio_oids * sizeof(uint64_t));
@@ -817,6 +826,7 @@ static inline bool oid_in_prio_oids(struct recovery_info *rinfo, uint64_t oid)
 static inline void finish_schedule_oids(struct recovery_info *rinfo)
 {
 	uint64_t i, nr_recovered = rinfo->next, new_idx;
+	uint64_t last_prio = rinfo->last_prio;
 	uint64_t *new_oids;
 
 	/* If I am the last oid, done */
@@ -824,12 +834,22 @@ static inline void finish_schedule_oids(struct recovery_info *rinfo)
 		goto done;
 
 	new_oids = xmalloc(list_buffer_size);
-	memcpy(new_oids, rinfo->oids, nr_recovered * sizeof(uint64_t));
-	memcpy(new_oids + nr_recovered, rinfo->prio_oids,
-	       rinfo->nr_prio_oids * sizeof(uint64_t));
-	new_idx = nr_recovered + rinfo->nr_prio_oids;
+	if (last_prio > 0 && last_prio > nr_recovered) {
+		memcpy(new_oids, rinfo->oids, last_prio * sizeof(uint64_t));
+		memcpy(new_oids + last_prio, rinfo->prio_oids,
+			rinfo->nr_prio_oids * sizeof(uint64_t));
+		new_idx = last_prio  + rinfo->nr_prio_oids;
+		i = last_prio;
+	} else {
+		memcpy(new_oids, rinfo->oids, nr_recovered * sizeof(uint64_t));
+		memcpy(new_oids + nr_recovered, rinfo->prio_oids,
+			rinfo->nr_prio_oids * sizeof(uint64_t));
+		new_idx = nr_recovered + rinfo->nr_prio_oids;
+		i = nr_recovered;
+	}
+	rinfo->last_prio = new_idx;
 
-	for (i = rinfo->next; i < rinfo->count; i++) {
+	for (; i < rinfo->count; i++) {
 		if (oid_in_prio_oids(rinfo, rinfo->oids[i]))
 			continue;
 		new_oids[new_idx++] = rinfo->oids[i];
