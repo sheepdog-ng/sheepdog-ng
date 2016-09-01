@@ -45,6 +45,13 @@ int prepare_iocb(uint64_t oid, const struct siocb *iocb, bool create)
 	return flags;
 }
 
+static char *get_obj_dir(char *path)
+{
+	if (is_stale_path(path))
+		path = dirname(path);
+	return dirname(path);
+}
+
 int err_to_sderr(const char *path, uint64_t oid, int err)
 {
 	struct stat s;
@@ -52,7 +59,7 @@ int err_to_sderr(const char *path, uint64_t oid, int err)
 
 	/* Use a temporary buffer since dirname() may modify its argument. */
 	pstrcpy(p, sizeof(p), path);
-	dir = dirname(p);
+	dir = get_obj_dir(p);
 
 	sd_debug("%s", path);
 	switch (err) {
