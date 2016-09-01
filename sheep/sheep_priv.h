@@ -173,6 +173,7 @@ struct disk {
 	struct rb_node rb;
 	char path[PATH_MAX];
 	uint64_t space;
+	uint64_t fsid;
 };
 
 struct vdisk {
@@ -546,6 +547,7 @@ int md_plug_disks(char *disks);
 int md_unplug_disks(char *disks);
 uint64_t md_get_size(uint64_t *used);
 uint32_t md_nr_disks(void);
+bool md_verify_disk(const char *path);
 
 static inline bool is_stale_path(const char *path)
 {

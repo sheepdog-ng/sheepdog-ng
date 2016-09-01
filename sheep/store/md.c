@@ -321,6 +321,17 @@ broken_path:
 	return 0;
 }
 
+static uint64_t init_path_fsid(const char *path)
+{
+	struct statvfs fs;
+
+	if (statvfs(path, &fs) < 0) {
+		sd_err("get disk %s fsid failed %m", path);
+		return 0;
+	}
+	return fs.f_fsid;
+}
+
 /* We don't need lock at init stage */
 bool md_add_disk(const char *path, bool purge)
 {
@@ -341,6 +352,12 @@ bool md_add_disk(const char *path, bool purge)
 	trim_last_slash(new->path);
 	new->space = init_path_space(new->path, purge);
 	if (!new->space) {
+		free(new);
+		return false;
+	}
+
+	new->fsid = init_path_fsid(new->path);
+	if (!new->fsid) {
 		free(new);
 		return false;
 	}
@@ -903,4 +920,33 @@ uint64_t md_get_size(uint64_t *used)
 uint32_t md_nr_disks(void)
 {
 	return nr_online_disks();
+}
+
+bool md_verify_disk(const char *path)
+{
+	struct statvfs fs;
+	struct disk *disk;
+	bool valid = true;
+
+	if (statvfs(path, &fs) < 0) {
+		sd_err("get disk %s stat failed %m", path);
+		return false;
+	}
+
+	sd_read_lock(&md.lock);
+	disk = path_to_disk(path);
+	if (!disk) {
+		/* already unpluged disk */
+		valid = false;
+		goto out;
+	}
+
+	if (fs.f_fsid != disk->fsid) {
+		/* mountpoint lost */
+		valid = false;
+		goto out;
+	}
+out:
+	sd_rw_unlock(&md.lock);
+	return valid;
 }

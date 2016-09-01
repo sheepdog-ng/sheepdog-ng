@@ -52,9 +52,13 @@ static char *get_obj_dir(char *path)
 	return dirname(path);
 }
 
+static int is_dir_corrupted(const char *dir)
+{
+	return !md_verify_disk(dir);
+}
+
 int err_to_sderr(const char *path, uint64_t oid, int err)
 {
-	struct stat s;
 	char p[PATH_MAX], *dir;
 
 	/* Use a temporary buffer since dirname() may modify its argument. */
@@ -64,7 +68,7 @@ int err_to_sderr(const char *path, uint64_t oid, int err)
 	sd_debug("%s", path);
 	switch (err) {
 	case ENOENT:
-		if (stat(dir, &s) < 0) {
+		if (is_dir_corrupted(dir)) {
 			sd_err("%s corrupted", dir);
 			return md_handle_eio(dir);
 		}
