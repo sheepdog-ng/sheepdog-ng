@@ -115,7 +115,6 @@ static char *log_nowname;
 int sd_log_level = SDOG_INFO;
 static pid_t sheep_pid;
 pid_t logger_pid = -1;
-static key_t semkey;
 static char *log_buff;
 
 static int64_t max_logsize = 500 * 1024 * 1024;  /*500MB*/
@@ -328,7 +327,7 @@ static int logarea_init(int size)
 	la->end = la->start + size;
 	la->tail = la->start;
 
-	la->semid = semget(semkey, 1, 0666 | IPC_CREAT);
+	la->semid = semget(IPC_PRIVATE, 1, 0666 | IPC_CREAT);
 	if (la->semid < 0) {
 		syslog(LOG_ERR, "semget failed: %m");
 		shmdt(la->start);
@@ -666,8 +665,6 @@ int log_init(const char *program_name, enum log_dst_type type, int level,
 	log_nowname = outfile;
 	pstrcpy(tmp, sizeof(tmp), outfile);
 	pstrcpy(log_dir, sizeof(log_dir), dirname(tmp));
-
-	semkey = random();
 
 	switch (type) {
 	case LOG_DST_STDOUT:
