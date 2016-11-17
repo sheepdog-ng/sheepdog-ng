@@ -1117,12 +1117,23 @@ static void recover_sheep_states(void)
 	int ret = SD_RES_CLUSTER_ERROR;
 
 	rb_for_each_entry(n, &sd_node_root, rb) {
+		struct sd_rsp *rsp = (struct sd_rsp *)&hdr;
+		int fd;
+
 		if (node_eq(&this_node.node, n))
 			continue;
 		sd_init_req(&hdr, SD_OP_CLUSTER_INFO);
 		hdr.data_length = sizeof(cinfo);
-		ret = sheep_exec_req(&n->nid, &hdr, &cinfo);
-		if (ret == SD_RES_SUCCESS)
+		fd = connect_to_addr(n->nid.addr, n->nid.port);
+		if (fd < 0)
+			continue;
+		sd_debug("try to get cinfo from node: %s",
+			 addr_to_str(n->nid.addr, n->nid.port));
+		ret = exec_req(fd, &hdr, &cinfo, NULL, 0, 0);
+		close(fd);
+		if (ret)
+			continue;
+		if (rsp->result == SD_RES_SUCCESS)
 			break;
 	}
 	if (ret != SD_RES_SUCCESS) {
