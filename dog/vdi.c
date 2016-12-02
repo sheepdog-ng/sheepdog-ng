@@ -38,6 +38,7 @@ static struct sd_option vdi_options[] = {
 	{'e', "exist", false, "only check objects exist or not,\n"
 	 "                          neither comparing nor repairing"},
 	{'A', "async", false, "delete vdi asynchronously"},
+	{'S', "single", false, "only list the single fully matched vdi"},
 	{ 0, NULL, false, NULL },
 };
 
@@ -57,6 +58,7 @@ static struct vdi_cmd_data {
 	bool no_share;
 	bool exist;
 	bool async;
+	bool single;
 } vdi_cmd_data = { ~0, };
 
 struct get_vdi_info {
@@ -287,6 +289,30 @@ static int vdi_list(int argc, char **argv)
 
 	if (!raw_output)
 		printf("  Name        Id    Size    Used  Shared    Creation time   VDI id  Copies  Tag\n");
+
+	if (vdi_cmd_data.single && vdiname) {
+		struct sd_inode *inode = NULL;
+		int ret;
+		struct get_vdi_info info;
+		uint32_t snapid;
+
+		memset(&info, 0, sizeof(info));
+		info.name = vdiname;
+
+		inode = malloc(sizeof(*inode));
+		ret = read_vdi_obj(vdiname, vdi_cmd_data.snapshot_id,
+			vdi_cmd_data.snapshot_tag, NULL, inode, SD_INODE_SIZE);
+		if (ret != EXIT_SUCCESS) {
+			free(inode);
+			return ret;
+		}
+
+		snapid = vdi_is_snapshot(inode) ? inode->snap_id : 0;
+		print_vdi_list(inode->vdi_id, vdiname,
+			vdi_cmd_data.snapshot_tag, snapid, 0, inode, &info);
+
+		return EXIT_SUCCESS;
+	}
 
 	if (vdiname) {
 		struct get_vdi_info info;
@@ -2610,7 +2636,7 @@ static struct subcommand vdi_cmd[] = {
 	{"rollback", "<vdiname>", "saphfrvT", "rollback to a snapshot",
 	 NULL, CMD_NEED_ARG,
 	 vdi_rollback, vdi_options},
-	{"list", "[vdiname]", "aprhoT", "list images",
+	{"list", "[vdiname]", "aprhoTSs", "list images",
 	 NULL, 0, vdi_list, vdi_options},
 	{"tree", NULL, "aphT", "show images in tree view format",
 	 NULL, 0, vdi_tree, vdi_options},
@@ -2724,6 +2750,9 @@ static int vdi_parser(int ch, const char *opt)
 		vdi_cmd_data.exist = true;
 	case 'A':
 		vdi_cmd_data.async = true;
+		break;
+	case 'S':
+		vdi_cmd_data.single = true;
 		break;
 	}
 
