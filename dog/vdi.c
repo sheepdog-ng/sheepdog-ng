@@ -268,6 +268,11 @@ static void print_obj_ref(uint32_t vid, const char *name, const char *tag,
 	uint64_t idx = data_oid_to_idx(oid);
 	struct get_vdi_info info;
 
+	if (idx >= SD_INODE_DATA_INDEX) {
+		sd_err("Failed to list: wrong oid %016"PRIx64"\n", oid);
+		exit(EXIT_FAILURE);
+	}
+
 	if (i->data_vdi_id[idx] != 0 &&
 			i->data_vdi_id[idx] == oid_to_vid(oid)) {
 		memset(&info, 0, sizeof(info));
