@@ -1189,9 +1189,10 @@ static int zk_join(const struct sd_node *myself,
 		 node_to_str(myself));
 	rc2 = zk_node_exists(path);
 
+	if (rc1 == ZOK && rc2 == ZOK && sys->upgrade)
+		return direct_join();
+
 	if (rc1 == ZOK || rc2 == ZOK) {
-		if (sys->upgrade)
-			return direct_join();
 		sd_err("Previous zookeeper session exist, shoot myself. Please "
 		       "wait for %d seconds to join me again. Or you can "
 		       "specify --upgrade to make rolling update.",
