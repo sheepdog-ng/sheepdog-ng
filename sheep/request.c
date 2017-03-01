@@ -107,6 +107,7 @@ static void gateway_op_done(struct work *work)
 	case SD_RES_NETWORK_ERROR:
 	case SD_RES_WAIT_FOR_JOIN:
 	case SD_RES_WAIT_FOR_FORMAT:
+	case SD_RES_SHUTDOWN:
 	case SD_RES_KILLED:
 		sd_debug("retrying failed I/O request op %s result %x epoch %"
 			 PRIu32 ", sys epoch %" PRIu32, op_name(req->op),
