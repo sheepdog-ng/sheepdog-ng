@@ -78,7 +78,7 @@ int default_write(uint64_t oid, const struct siocb *iocb)
 	 * any bugs. We need call err_to_sderr() to return EIO if disk is broken
 	 */
 	if (!default_exist(oid, iocb->ec_index))
-		return err_to_sderr(path, oid, ENOENT);
+		return err_to_sderr(path, oid, errno);
 
 	fd = open(path, flags, sd_def_fmode);
 	if (unlikely(fd < 0))
@@ -156,7 +156,7 @@ static int default_read_from_path(uint64_t oid, const char *path,
 	 * For stale path, get_store_stale_path already does default_exist job.
 	 */
 	if (!is_stale_path(path) && !default_exist(oid, iocb->ec_index))
-		return err_to_sderr(path, oid, ENOENT);
+		return err_to_sderr(path, oid, errno);
 
 	fd = open(path, flags);
 	if (fd < 0)
