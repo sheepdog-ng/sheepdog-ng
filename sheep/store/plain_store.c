@@ -173,50 +173,20 @@ static int default_read_from_path(uint64_t oid, const char *path,
 	return ret;
 }
 
-static int init_vdi_state(uint64_t oid, const char *wd, uint32_t epoch)
-{
-	int ret;
-	struct sd_inode *inode = xzalloc(SD_INODE_HEADER_SIZE);
-	struct siocb iocb = {
-		.epoch = epoch,
-		.buf = inode,
-		.length = SD_INODE_HEADER_SIZE,
-	};
-	char path[PATH_MAX];
-
-	if (epoch == 0)
-		get_store_path(oid, iocb.ec_index, path);
-	else
-		get_store_stale_path(oid, iocb.epoch, iocb.ec_index, path);
-
-	ret = default_read_from_path(oid, path, &iocb);
-	if (ret != SD_RES_SUCCESS) {
-		sd_err("failed to read inode header %" PRIx64 " %" PRId32
-		       "at %s", oid, epoch, path);
-		goto out;
-	}
-	atomic_set_bit(oid_to_vid(oid), sys->vdi_inuse);
-out:
-	free(inode);
-	return ret;
-}
-
 static int init_objlist_and_vdi_bitmap(uint64_t oid, const char *wd,
 				       uint32_t epoch, uint8_t ec_index,
 				       struct vnode_info *vinfo,
 				       void *arg)
 {
-	int ret;
+	int ret = SD_RES_SUCCESS;
 	objlist_cache_insert(oid);
 
 	if (is_vdi_obj(oid)) {
 		sd_debug("found the VDI object %" PRIx64" epoch %"PRIu32
 			 " at %s", oid, epoch, wd);
-		ret = init_vdi_state(oid, wd, epoch);
-		if (ret != SD_RES_SUCCESS)
-			return ret;
+		atomic_set_bit(oid_to_vid(oid), sys->vdi_inuse);
 	}
-	return SD_RES_SUCCESS;
+	return ret;
 }
 
 int default_init(void)
